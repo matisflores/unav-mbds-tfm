@@ -1,7 +1,10 @@
 import os
 import cv2
 import fire
+import sqlite3
+from datetime import datetime
 from matplotlib import pyplot as plt
+import numpy as np
 from ultralytics import YOLO
 
 from motpy.core import Detection
@@ -33,8 +36,8 @@ def active_zone(frame, point, zones, zone_size):
     width = frame.shape[1]
     x, y = point[0],point[1]
     zone_index = ((y // zone_size) + 1) * (width // zone_size) + (x // zone_size)
-    print(f"Point: ({point}) - Zone: {zone_index} {zones[zone_index][3]}")
     if zone_index < len(zones):
+        print(f"Point: ({point}) - Zone: {zone_index} {zones[zone_index][3]}")
         return zone_index
 
     return None
@@ -57,9 +60,30 @@ def plot_frame_with_zones(frame, zones, zone_size):
         cv2.putText(frame_with_zones, str(id), (x,y), cv2.FONT_HERSHEY_SIMPLEX, .3, zone_active, 1)
     return frame_with_zones
 
+def create_table():
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS Points
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 tracking_id TEXT,
+                 x INTEGER,
+                 y INTEGER,
+                 zone INTEGER,
+                 datetime TEXT)''')
+    conn.commit()
+    conn.close()
+
+def save_point(tracking_id, x, y, zone):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO Points (tracking_id, x, y, zone, datetime) VALUES (?, ?, ?, ?, ?)", (tracking_id, x, y, zone, now))
+    conn.commit()
+    conn.close()
+
 def run(video_path: str= 'assets/1_original.mp4',
         #detect_labels,
-        detection_rate: int = 2,
+        detection_rate: int = 1,
         video_downscale: float = 1.,
         confidence_threshold: float = 0.5,
         tracker_min_iou: float = 0.25,
@@ -67,6 +91,10 @@ def run(video_path: str= 'assets/1_original.mp4',
         track_text_verbose: int = 0,
         viz_wait_ms: int = 1,
         zone_size = 40):
+    
+    # Create the table if it doesn't exist
+    create_table()
+
     # setup detector, video reader and object tracker
     detector = YOLO('assets/yolov8n.pt')
     cap, cap_fps = read_video_file(video_path)
@@ -78,7 +106,6 @@ def run(video_path: str= 'assets/1_original.mp4',
                     'q_var_pos': 5000., 'r_var_pos': 0.1},
         matching_fn_kwargs={'min_iou': tracker_min_iou,
                             'multi_match_min_iou': 0.93})
-
 
     #zones
     ret, frame = cap.read()
@@ -117,7 +144,7 @@ def run(video_path: str= 'assets/1_original.mp4',
             for det in detections:
                 draw_detection(frame, det)
 
-        active_zones = zones.copy()
+        #active_zones = zones.copy()
         for track in active_tracks:
             center = (int((track.box[0]+track.box[2])/2),int((track.box[1]+track.box[3])/2))
 
@@ -125,7 +152,10 @@ def run(video_path: str= 'assets/1_original.mp4',
             zone_id = active_zone(frame, center, zones, zone_size)
             if zone_id != None:
                 x, y, zone, id, _ = zones[zone_id]
-                active_zones[zone_id] = x, y, zone, id, 1
+                save_point(track.id, center[0], center[1], id)
+
+                #active_zones[zone_id] = x, y, zone, id, 1
+
                 cv2.putText(frame, str(id), center, cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1)
             
             cv2.circle(frame, center, 1, (0,255,0), thickness=-1)
@@ -141,14 +171,16 @@ def run(video_path: str= 'assets/1_original.mp4',
         # Display Info
         drawText(frame, "FPS : {} ({}%)".format(str(int(fps)), int(fps/cap_fps*100)), (10, 30))
 
-        cv2.imshow('frame', frame)
+        cv2.imshow(f'Processed: {video_path}', frame)
         c = cv2.waitKey(viz_wait_ms)
         if c == ord('q'):
             break
 
         step += 1
-    
+
     cap.release()
+
+    cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
