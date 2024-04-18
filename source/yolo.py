@@ -16,7 +16,7 @@ def read_video_file(video_path: str):
 def drawText(frame, txt, location, color=(50, 170, 50)):
     cv2.putText(frame, txt, location, cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
 
-def run(video_path: str,
+def run(video_path: str= 'assets/1_original.mp4',
         #detect_labels,
         detection_rate: int = 1,
         video_downscale: float = 1.,
@@ -26,7 +26,7 @@ def run(video_path: str,
         track_text_verbose: int = 0,
         viz_wait_ms: int = 1):
     # setup detector, video reader and object tracker
-    detector = YOLO('yolov8n.pt')
+    detector = YOLO('assets/yolov8n.pt')
     cap, cap_fps = read_video_file(video_path)
     tracker = MultiObjectTracker(
         dt=1 / cap_fps,
