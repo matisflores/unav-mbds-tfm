@@ -17,10 +17,10 @@ def load_tracking_ids():
 
     return tracking_ids
 
-def display_points_with_velocity(tracking_ids):
+def display_points_with_velocity(frame, tracking_ids):
     # Create a black image
-    width, height = 800, 600
-    black_screen = np.zeros((height, width, 3), dtype=np.uint8)
+    #width, height = 800, 600
+    #black_screen = np.zeros((height, width, 3), dtype=np.uint8)
 
     # Connect to the SQLite database
     conn = sqlite3.connect('data.db')
@@ -28,7 +28,8 @@ def display_points_with_velocity(tracking_ids):
 
     for tracking_id in tracking_ids:
         # Generate a unique color for the tracking ID
-        color = np.random.randint(0, 255, size=(3,)).tolist()
+        #color = np.random.randint(0, 255, size=(3,)).tolist()
+        color = (0, 0, 255)
 
         # Retrieve points for the current tracking ID
         c.execute("SELECT * FROM Points WHERE tracking_id=? ORDER BY datetime", (tracking_id,))
@@ -41,7 +42,7 @@ def display_points_with_velocity(tracking_ids):
             _, _, x, y, _, _ = point
 
             # Draw a circle at the point coordinates on the black screen
-            cv2.circle(black_screen, (x, y), 5, color, -1)  # Use the unique color
+            cv2.circle(frame, (x, y), 10, color, -1)  # Use the unique color
 
             # Update previous point coordinates
             prev_x, prev_y = x, y
@@ -49,14 +50,29 @@ def display_points_with_velocity(tracking_ids):
     conn.close()
 
     # Display the black screen with points
-    cv2.imshow('Points', black_screen)
+    cv2.imshow('Points', frame)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 def run():
+    # Load video
+    video_path = 'assets/1_jail.mp4'
+    cap = cv2.VideoCapture(video_path)
+
+    # Check if video opened successfully
+    if not cap.isOpened():
+        print("Error: Unable to open video.")
+        exit()
+
+    # Read first frame
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Unable to read video.")
+        exit()
+
     # Load all tracking IDs from the SQLite table
     tracking_ids = load_tracking_ids()
-    display_points_with_velocity(tracking_ids)
+    display_points_with_velocity(frame, tracking_ids)
 
 if __name__ == '__main__':
     fire.Fire(run)

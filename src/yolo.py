@@ -37,7 +37,7 @@ def active_zone(frame, point, zones, zone_size):
     x, y = point[0],point[1]
     zone_index = ((y // zone_size) + 1) * (width // zone_size) + (x // zone_size)
     if zone_index < len(zones):
-        print(f"Point: ({point}) - Zone: {zone_index} {zones[zone_index][3]}")
+        #print(f"Point: ({point}) - Zone: {zone_index} {zones[zone_index][3]}")
         return zone_index
 
     return None
@@ -46,7 +46,7 @@ def activate_zone(frame, point, zones, zone_size):
     width = frame.shape[1]
     x, y = point[0],point[1]
     zone_index = (y // zone_size) * (width // zone_size) + (x // zone_size)
-    print(f"Point: ({x},{y}) - Zone: {zone_index} {zones[zone_index][3]}")
+    #print(f"Point: ({x},{y}) - Zone: {zone_index} {zones[zone_index][3]}")
     if zone_index < len(zones):
         zones[zone_index] = (zones[zone_index][0], zones[zone_index][1], zones[zone_index][2], zones[zone_index][3], 1)
 
@@ -81,13 +81,13 @@ def save_point(tracking_id, x, y, zone):
     conn.commit()
     conn.close()
 
-def run(video_path: str= 'assets/1_original.mp4',
+def run(video_path: str= 'assets/1_jail.mp4',
         #detect_labels,
         detection_rate: int = 1,
         video_downscale: float = 1.,
         confidence_threshold: float = 0.5,
         tracker_min_iou: float = 0.25,
-        show_detections: bool = True,
+        show_detections: bool = False,
         track_text_verbose: int = 0,
         viz_wait_ms: int = 1,
         zone_size = 40):
@@ -159,11 +159,11 @@ def run(video_path: str= 'assets/1_original.mp4',
                 cv2.putText(frame, str(id), center, cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1)
             
             cv2.circle(frame, center, 1, (0,255,0), thickness=-1)
-            draw_track(frame, track, thickness=2, text_at_bottom=True, text_verbose=track_text_verbose, random_color=False, fallback_color=(0,0,255))
+            #draw_track(frame, track, thickness=1, text_at_bottom=True, text_verbose=track_text_verbose, random_color=False, fallback_color=(0,0,255))
 
         #plot zones
         #frame = plot_frame_with_zones(frame, active_zones, zone_size)
-        frame = plot_frame_with_zones(frame, zones, zone_size)
+        #frame = plot_frame_with_zones(frame, zones, zone_size)
 
         # Calculate Frames per second (FPS)
         fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer)
