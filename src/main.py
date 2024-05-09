@@ -4,6 +4,7 @@ import cv2
 from ultralytics import YOLO
 
 from config.config import Config
+from data.db import DB
 from mot.Zones import Zones
 from mot.Roi import Roi
 from motpy.core import Detection
@@ -13,6 +14,9 @@ def main(config_file):
     # Load configurations
     config = Config()
     config.load(config_file)
+
+    # Open DB
+    db = DB()
 
     # Load video
     video_path = config.source
@@ -49,15 +53,12 @@ def main(config_file):
     detection_rate: int = 1
     confidence_threshold: float = 0.5
 
-    detector = YOLO('assets/yolov8n.pt')
+    detector = YOLO(config.path_assets_dir + '/yolov8n.pt')
     tracker = MultiObjectTracker(
         dt=1 / video_fps,
         tracker_kwargs={'max_staleness': 5},
-        model_spec={'order_pos': 1, 'dim_pos': 2,
-                    'order_size': 0, 'dim_size': 2,
-                    'q_var_pos': 5000., 'r_var_pos': 0.1},
-        matching_fn_kwargs={'min_iou': tracker_min_iou,
-                            'multi_match_min_iou': 0.93})
+        model_spec={'order_pos': 1, 'dim_pos': 2, 'order_size': 0, 'dim_size': 2, 'q_var_pos': 5000., 'r_var_pos': 0.1},
+        matching_fn_kwargs={'min_iou': tracker_min_iou, 'multi_match_min_iou': 0.93})
 
     step = 0
     while True:
@@ -95,6 +96,10 @@ def main(config_file):
             active = roi.in_zone(center)
             color = (0,0,255) if active else (0,255,0)
             cv2.circle(frame, center, 2, color, thickness=-1)
+
+            if active:
+                #when person is in ROI
+                db.save_tracker_rois(track.id, roi._roi_zones)
 
         # Show roi
         frame = roi.plot(frame)

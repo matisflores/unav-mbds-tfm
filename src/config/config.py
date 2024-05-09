@@ -26,6 +26,10 @@ class Config:
         return self._config.get('Paths', 'data_dir')
     
     @property
+    def path_assets_dir(self):
+        return self._config.get('Paths', 'assets_dir')
+    
+    @property
     def oc_window_title(self):
         return self._config.get('Opencv', 'window_title')
     
