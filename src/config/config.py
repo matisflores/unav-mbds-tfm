@@ -1,6 +1,10 @@
 import configparser
 
 GENERAL='General'
+PATHS='Paths'
+OPENCV='Opencv'
+YOLO='Yolo'
+KALMAN='Kalman'
 
 class Config:
     _instance = None
@@ -23,20 +27,32 @@ class Config:
 
     @property
     def path_data_dir(self):
-        return self._config.get('Paths', 'data_dir')
+        return self._config.get(PATHS, 'data_dir')
     
     @property
     def path_assets_dir(self):
-        return self._config.get('Paths', 'assets_dir')
+        return self._config.get(PATHS, 'assets_dir')
     
     @property
     def oc_window_title(self):
-        return self._config.get('Opencv', 'window_title')
+        return self._config.get(OPENCV, 'window_title')
     
     @property
-    def zone_size(self):
-        return self._config.get(GENERAL, 'zone_size')
+    def cell_size(self):
+        return self._config.get(GENERAL, 'cell_size')
     
     @property
     def source(self):
         return self._config.get(GENERAL, 'source')
+    
+    @property
+    def yolo_confidence_threshold(self):
+        return self._config.get(YOLO, 'confidence_threshold')
+    
+    @property
+    def kalman_min_iou(self):
+        return self._config.get(KALMAN, 'min_iou')
+    
+    @property
+    def kalman_min_steps_alive(self):
+        return self._config.get(KALMAN, 'min_steps_alive')

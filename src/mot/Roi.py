@@ -1,6 +1,6 @@
 import cv2
 
-from mot.Zones import Zones
+from mot.Grid import Grid
 
 WINDOW_TITLE='ROI Selection'
 ROI_COLOR = (0, 255, 0)
@@ -8,16 +8,16 @@ ROI_SELECTED_COLOR = (0, 200, 0)
 ROI_THICKNESS = 1
 
 class Roi:
-    _zones: Zones = None
+    _grid: Grid = None
     _selecting = False
     _frame = None
     _start = None
     _end = None
-    _roi_zones = None
+    _roi_cells = None
 
-    def __init__(self, zones: Zones):
-        self._zones = zones
-        self._roi_zones = []
+    def __init__(self, grid: Grid):
+        self._grid = grid
+        self._roi_cells = []
     
     def define(self, frame):
         self._frame = frame
@@ -52,13 +52,13 @@ class Roi:
         if self._start is not None and self._end is not None:
             x1, y1 = self._start
             x2, y2 = self._end
-            zones = self._zones.zones
-            zone_size = self._zones.zone_size
+            cells = self._grid.cells
+            cell_size = self._grid.cell_size
 
-            selected = [zone for zone in zones if ((x1 <= zone[0] and zone[0] < x2) or (x1 <= zone[0] + zone_size and zone[0] + zone_size < x2)) and
-                                                          ((y1 <= zone[1] and zone[1] < y2) or (y1 <= zone[1] + zone_size and zone[1] + zone_size < y2))]
+            selected = [cell for cell in cells if ((x1 <= cell[0] and cell[0] < x2) or (x1 <= cell[0] + cell_size and cell[0] + cell_size < x2)) and
+                                                          ((y1 <= cell[1] and cell[1] < y2) or (y1 <= cell[1] + cell_size and cell[1] + cell_size < y2))]
             
-            self._roi_zones = self._roi_zones + selected
+            self._roi_cells = self._roi_cells + selected
 
         self.plot(self._frame, False)
         cv2.imshow(WINDOW_TITLE, self._frame)
@@ -66,11 +66,11 @@ class Roi:
     def plot(self, frame, copy=True):
         # Display the frame with selected zones
         frame = frame.copy() if copy else frame
-        zone_size = self._zones.zone_size
+        cell_size = self._grid.cell_size
 
-        for zone in self._roi_zones:
-            x, y, _, _, _ = zone
-            cv2.rectangle(frame, (x, y), (x+zone_size, y+zone_size), ROI_SELECTED_COLOR, ROI_THICKNESS)
+        for cell in self._roi_cells:
+            x, y, _, _, _ = cell
+            cv2.rectangle(frame, (x, y), (x+cell_size, y+cell_size), ROI_SELECTED_COLOR, ROI_THICKNESS)
         
         return frame
     
@@ -84,17 +84,17 @@ class Roi:
         Returns:
             bool: True if the point is inside at least one selected zone, False otherwise.
         """
-        for zone in self._roi_zones:
+        for zone in self._roi_cells:
             x, y, _, _, _ = zone
-            zone_size = self._zones.zone_size
-            zone_end_x = x + zone_size
-            zone_end_y = y + zone_size
+            cell_size = self._grid.cell_size
+            cell_end_x = x + cell_size
+            cell_end_y = y + cell_size
             
-            if x <= point[0] <= zone_end_x and y <= point[1] <= zone_end_y:
+            if x <= point[0] <= cell_end_x and y <= point[1] <= cell_end_y:
                 return True
 
         return False
 
     @property
-    def selected_zones(self):
-        return self._roi_zones
+    def selected_cells(self):
+        return self._roi_cells
