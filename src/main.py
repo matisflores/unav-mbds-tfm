@@ -36,9 +36,6 @@ def main(config_file):
     config = Config()
     config.load(config_file)
 
-    # Database
-    db = DB(config.data_dir + '/tracking.db')
-
     # Tracking options
     detection_rate: int = 1
     video_downscale: float = 1
@@ -65,13 +62,15 @@ def main(config_file):
     detector = YOLODetector()
     tracker = MOTKalmanTracker(video.fps)
 
-    def on_track_step(active_tracks):
-        for track in active_tracks:
-            #get zone_id
-            active = roi.in_zone(track.center)
+    def on_track_step(track):
+        # Database
+        db = DB(config.data_dir + '/tracking.db')
 
-            if active:
-                print(track._id)
+        cell = roi.in_zone(track.center)
+
+        if cell is not None:
+            x, y, frame_part, id, _ = cell
+            db.save_tracker_rois(track._id, '1', id)
 
     tracking_processor = EventListener(on_track_step, tracking_events)
     tracking_processor.start()
@@ -83,15 +82,14 @@ def main(config_file):
 
         # Detect objects
         detections = [] if step % detection_rate != 0 else detector.detect(frame)
-
         METRIC_DETECTIONS.store(len(detections), step)
 
         # Track detected objects
         active_tracks = tracker.step(detections=detections)
-
         METRIC_TRACKERS.store(len(active_tracks), step)
 
-        tracking_events.put(active_tracks)
+        for track in active_tracks:
+            tracking_events.put(track)
 
         # Show roi
         frame = roi.plot(frame)
@@ -104,7 +102,12 @@ def main(config_file):
         # Show trackers
         if show_trackers:
             for track in active_tracks:
-                cv2.circle(frame, track.center, 2, (0,255,0), thickness=-1)
+                cell = roi.in_zone(track.center)
+
+                if cell is not None:
+                    cv2.circle(frame, track.center, 2, (0,0,255), thickness=-1)
+                else:    
+                    cv2.circle(frame, track.center, 2, (0,255,0), thickness=-1)
 
         # On End
         METRIC_FPS.stop(step)

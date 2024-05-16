@@ -18,7 +18,7 @@ class Grid:
                 self._cells.append((x, y, frame_part, id, 0))
                 id += 1
 
-        print(f"Source: {height}x{width} - Zone Size: {self._cell_size}x{self._cell_size} - Zones: {len(self._cells)}")
+        print(f"Source: {height}x{width} - Cell Size: {self._cell_size}x{self._cell_size} - Cells: {len(self._cells)}")
         return self._cells
     
     def plot(self, frame):

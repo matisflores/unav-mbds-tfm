@@ -74,7 +74,7 @@ class Roi:
         
         return frame
     
-    def in_zone(self, point: tuple) -> bool:
+    def in_zone(self, point: tuple):
         """
         Check if a point is inside each selected zone.
 
@@ -84,16 +84,16 @@ class Roi:
         Returns:
             bool: True if the point is inside at least one selected zone, False otherwise.
         """
-        for zone in self._roi_cells:
-            x, y, _, _, _ = zone
+        for cell in self._roi_cells:
+            x, y, _, _, _ = cell
             cell_size = self._grid.cell_size
             cell_end_x = x + cell_size
             cell_end_y = y + cell_size
             
             if x <= point[0] <= cell_end_x and y <= point[1] <= cell_end_y:
-                return True
+                return cell
 
-        return False
+        return None
 
     @property
     def selected_cells(self):

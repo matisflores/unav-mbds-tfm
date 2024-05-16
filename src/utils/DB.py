@@ -11,14 +11,14 @@ class DB:
 
         return cls._instance
     
-    def save_tracker_rois(self, tracker, rois):
+    def save_tracker_rois(self, tracker, roi, cell):
         c = self._db.cursor()
 
         # Create table if not exists
-        c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, rois TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, roi TEXT, cell TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
 
         # Insert ROI and selected zones into the database
-        c.execute("INSERT INTO roi_tracks (tracker, rois) VALUES (?, ?)", (tracker, str(rois)))
+        c.execute("INSERT INTO roi_tracks (tracker, roi, cell) VALUES (?, ?, ?)", (tracker, roi, cell))
 
         self._db.commit()
 
