@@ -1,8 +1,8 @@
 import cv2
 
-from mot.Grid import Grid
+from utils.Grid import Grid
 
-WINDOW_TITLE='ROI Selection'
+WINDOW_TITLE = 'ROI Selection'
 ROI_COLOR = (0, 255, 0)
 ROI_SELECTED_COLOR = (0, 200, 0)
 ROI_THICKNESS = 1

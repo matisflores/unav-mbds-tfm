@@ -1,16 +1,12 @@
 import cv2
 
-from config.config import Config
-
 class Grid:
     _cells = None
     _cell_size = None
-    _config = None
 
-    def __init__(self):
+    def __init__(self, cell_size: int):
         self._cells = []
-        self._config = Config()
-        self._cell_size = int(self._config.cell_size)
+        self._cell_size = cell_size
 
     def divide(self, frame):
         height, width, _ = frame.shape

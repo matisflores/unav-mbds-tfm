@@ -1,114 +1,80 @@
-
 import argparse
 import cv2
 import queue
 
 from config.config import Config
+
 from data.db import DB
+
+from mot.Algorithm import Algorithm
 from mot.Detector import YOLODetector
-from mot.Grid import Grid
 from mot.Roi import Roi
-from mot.Tracker import MOTKalmanTracker
-from mot.Track import Track
-from utils.Worker import Worker
-from utils.Layout import Layout, Screen
+from mot.MOTKalmanTracker import MOTKalmanTracker
+from mot.Events import Event_StepEnd, Event_TrackerInRoi
+from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
+
+from utils.Grid import Grid
+from utils.Video import Video
+from utils.Screen import Screen
 
 def main(config_file):
+    # Screen Layout
+    SCREEN_PRIMARY = Screen('Video', width=0.75)
+    SCREEN_STATS_1 = Screen('Stats 1', width=0.25, offset_x=0.75, height=0.27, resize=True)
+    SCREEN_STATS_2 = Screen('Stats 2', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.001)
+    SCREEN_STATS_3 = Screen('Stats 3', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.3)
+
+    # Metrics
+    maxlen = 250
+    METRIC_FPS = MetricFPS('FPS', maxlen)
+    METRIC_DETECTIONS = MetricDetections('Detections', maxlen)
+    METRIC_TRACKERS = MetricTrackers('Active Trackers', maxlen)
+
+    # Events
+    events = queue.Queue()
+
     # Load configurations
     config = Config()
     config.load(config_file)
 
-    # Tracking options
-    detection_rate: int = 1
-    video_downscale: float = 1.
-    show_detections: bool = True
+    # Database
+    #db = DB()
+
+
+    
+    
 
     # Load video
-    video_path = config.source
-    video_cap = cv2.VideoCapture(video_path)
-
-    # Check if video opened successfully
-    if not video_cap.isOpened():
-        print("Error: Unable to open video.")
-        exit()
-
-    # Get video FPS
-    video_fps = float(video_cap.get(cv2.CAP_PROP_FPS))
-
-    # Read first frame
-    ret, frame = video_cap.read()
-    if not ret:
-        print("Error: Unable to read video.")
-        exit()
-
-    # Screen Layout
-    SCREEN_PRIMARY = 'primary'
-    SCREEN_STATS_1 = 'stats_1'
-    SCREEN_STATS_2 = 'stats_2'
-    SCREEN_STATS_3 = 'stats_3'
-    screens = {
-        SCREEN_PRIMARY: Screen(f'Processing: {video_path}', width=0.75, height=1),
-        SCREEN_STATS_1: Screen('Stadistica 1', width=0.25, offset_x=0.75, height=0.27, resize=True),
-        SCREEN_STATS_2: Screen('Stadistica 2', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.001),
-        SCREEN_STATS_3: Screen('Stadistica 3', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.3),
-    }
-    screen = Layout(screens)
+    video = Video(config.source)
+    video.open()
+    frame = video.read()
 
     # Divide frame
-    grid = Grid()
+    cell_size = int(config.cell_size)
+    grid = Grid(cell_size)
     grid.divide(frame)
     #frame = grid.plot(frame)
 
     # Roi selection
     roi = Roi(grid)
     roi.define(frame)
-    frame = roi.plot(frame)
+    #frame = roi.plot(frame)
+
+    # Tracking options
+    detection_rate: int = 1
+    video_downscale: float = 1.
+    show_detections: bool = True
 
     # Start tracking
     detector = YOLODetector()
-    tracker = MOTKalmanTracker(video_fps)
-    events = queue.Queue()
+    tracker = MOTKalmanTracker(video.fps)
 
-    def on_active(events: queue.Queue):
-        db = DB()
+    # Tracking
+    def on_frame(frame, step: int):
+        # On Start
+        METRIC_FPS.start()
 
-        while True:
-            ev = events.get()
-
-            if ev is None:
-                break
-
-            track = ev.get('track', None)
-            roi = ev.get('roi', None)
-
-            if track is None or roi is None:
-                continue
-
-            db.save_tracker_rois(track._id, roi._roi_cells)
-
-    analyzer = Worker(on_active, args=(events,))
-    analyzer.start()
-
-    def on_step(detections: list[any], active_tracks: list[Track]):
-        for track in active_tracks:
-            active = roi.in_zone(track.center)
-            color = (0,0,255) if active else (0,255,0)
-            cv2.circle(frame, track.center, 2, color, thickness=-1)
-
-            if active:
-                events.put({
-                    'track': track,
-                    'roi': roi
-                })
-
-    step = 0
-    while True:
-        ret, frame = video_cap.read()
-        if not ret:
-            break
-
-        # Start timer
-        timer = cv2.getTickCount()
+        #save start
 
         # Downscale frame
         #frame = cv2.resize(frame, fx=video_downscale, fy=video_downscale, dsize=None, interpolation=cv2.INTER_AREA)
@@ -116,10 +82,21 @@ def main(config_file):
         # Detect objects
         detections = [] if step % detection_rate != 0 else detector.detect(frame)
 
+        METRIC_DETECTIONS.store(len(detections))
+
         # Track detected objects
         active_tracks = tracker.step(detections=detections)
 
-        on_step(detections, active_tracks)
+        METRIC_TRACKERS.store(len(active_tracks))
+
+        for track in active_tracks:
+            #get zone_id
+            active = roi.in_zone(track.center)
+            color = (0,0,255) if active else (0,255,0)
+            cv2.circle(frame, track.center, 2, color, thickness=-1)
+
+            if active:
+                events.put(Event_TrackerInRoi(track, roi))
 
         # Show roi
         frame = roi.plot(frame)
@@ -129,23 +106,41 @@ def main(config_file):
             for det in detections:
                 cv2.rectangle(frame, (int(det.box[0]), int(det.box[1])), (int(det.box[2]), int(det.box[3])), (255, 0, 0), 1)
 
+        # On End
+        METRIC_FPS.stop()
 
-        # Calculate Frames per second (FPS)
-        fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer)
-        cv2.putText(frame, "FPS : {} ({}%)".format(str(int(fps)), int(fps/video_fps*100)), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 170, 50), 3)
+        events.put(Event_StepEnd(frame))
 
-        # Show frame
-        c = screen.show(SCREEN_PRIMARY, frame, 1)
-        if c == ord('q'):
+    algorithm = Algorithm(video, on_frame)
+    algorithm.start()
+
+    while True:
+        event = events.get()
+
+        if event is None:
             break
 
-        step += 1
+        if isinstance(event, Event_TrackerInRoi):
+            event.save()
+        elif isinstance(event, Event_StepEnd):
+            key = SCREEN_STATS_1.show(METRIC_FPS.plot())
+            if key == ord('q'):
+                break
 
-    video_cap.release()
+            key = SCREEN_STATS_2.show(METRIC_DETECTIONS.plot())
+            if key == ord('q'):
+                break
 
-    events.put(None)
-    analyzer.join()
-    screen.close()
+            key = SCREEN_STATS_3.show(METRIC_TRACKERS.plot())
+            if key == ord('q'):
+                break
+
+            key = SCREEN_PRIMARY.show(event.frame)
+            if key == ord('q'):
+                break
+
+    algorithm.stop()
+    video.release()
 
 
 

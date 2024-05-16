@@ -45,6 +45,9 @@ class Screen:
         if show:
             self.show(np.zeros((self.height, self.width, 3), dtype=np.uint8))
 
+    def __del__(self):
+        cv2.destroyWindow(self.name)
+
     @property
     def position(self):
         return (self.offset_x, self.offset_y)
@@ -58,20 +61,7 @@ class Screen:
         cv2.moveWindow(self.name, self.offset_x, self.offset_y + self.menu_bar)
 
         return cv2.waitKey(delay)
-
-class Layout:
-    _screens: dict[str, Screen] = {}
-
-    def __init__(self, screens: dict[str, Screen] = {}):
-        self._screens = screens
-
-    def show(self, screen: str, frame, delay: int = 1):
-        scr = self._screens.get(screen, None)
-
-        if scr is not None:
-            return scr.show(frame, delay)
-        
-        return None
     
-    def close(self):
-        cv2.destroyAllWindows()
+    def read(self, filename: str, delay: int = 1):
+        frame = cv2.imread(filename)
+        return self.show(frame, delay)
