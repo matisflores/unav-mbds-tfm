@@ -72,3 +72,6 @@ class Layout:
             return scr.show(frame, delay)
         
         return None
+    
+    def close(self):
+        cv2.destroyAllWindows()

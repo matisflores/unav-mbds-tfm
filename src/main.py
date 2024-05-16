@@ -136,8 +136,6 @@ def main(config_file):
 
         # Show frame
         c = screen.show(SCREEN_PRIMARY, frame, 1)
-        #cv2.imshow(f'Processing: {video_path}', frame)
-        #c = cv2.waitKey(1)
         if c == ord('q'):
             break
 
@@ -147,7 +145,7 @@ def main(config_file):
 
     events.put(None)
     analyzer.join()
-    cv2.destroyAllWindows()
+    screen.close()
 
 
 
