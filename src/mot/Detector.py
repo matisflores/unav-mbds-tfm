@@ -1,4 +1,4 @@
-from utils.config import Config
+from utils.Config import Config
 from motpy.core import Detection
 from ultralytics import YOLO
 

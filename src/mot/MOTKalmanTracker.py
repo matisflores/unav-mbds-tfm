@@ -1,7 +1,7 @@
 import motpy
 
 from mot.Track import Track
-from utils.config import Config
+from utils.Config import Config
 
 def track_from_motpy(track: motpy.core.Track):
     return Track(track.id, track.box, track.score, track.class_id)

@@ -4,21 +4,23 @@ import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 
-
 class Metric():
-    _history: deque = None
+    _steps: deque = None
+    _values: deque = None
     _name: str = None
     
     def __init__(self, name: str, maxlen: int):
         self._name = name
-        self._history = deque(maxlen=maxlen)
+        self._steps = deque(maxlen=maxlen)
+        self._values = deque(maxlen=maxlen)
 
-    def store(self, value):
-        self._history.append(value)
+    def store(self, value, step):
+        self._steps.append(step)
+        self._values.append(value)
 
     def plot(self):
         buffer = BytesIO()
-        plt.plot(list(range(len(self._history))), self._history, color='blue')
+        plt.plot(self._steps, self._values)
         plt.xlabel('Steps')
         plt.ylabel(self._name)
         plt.savefig(buffer, format='png')
@@ -34,9 +36,9 @@ class MetricFPS(Metric):
     def start(self):
         self._start = cv2.getTickCount()
 
-    def stop(self):
+    def stop(self, step):
         end = cv2.getTickFrequency() / (cv2.getTickCount() - self._start)
-        self.store(end)
+        self.store(end, step)
 
         return end
     

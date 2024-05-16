@@ -20,6 +20,7 @@ class Algorithm():
                 break
 
             self._on_frame(frame, step)
+            step += 1
 
     def start(self):
         if self._thread is None:

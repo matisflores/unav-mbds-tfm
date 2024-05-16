@@ -6,14 +6,14 @@ from mot.Algorithm import Algorithm
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
 from mot.MOTKalmanTracker import MOTKalmanTracker
-from mot.Events import Event_StepEnd, Event_TrackerInRoi
 from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
 
+from utils.Config import Config
 from utils.DB import DB
-from utils.config import Config
+from utils.EventListener import EventListener
 from utils.Grid import Grid
-from utils.Video import Video
 from utils.Screen import Screen
+from utils.Video import Video
 
 def main(config_file):
     # Screen Layout
@@ -23,13 +23,14 @@ def main(config_file):
     SCREEN_STATS_3 = Screen('Stats 3', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.3)
 
     # Metrics
-    maxlen = 250
+    maxlen = 100
     METRIC_FPS = MetricFPS('FPS', maxlen)
     METRIC_DETECTIONS = MetricDetections('Detections', maxlen)
     METRIC_TRACKERS = MetricTrackers('Active Trackers', maxlen)
 
     # Events
-    events = queue.Queue()
+    screen_events = queue.Queue()
+    tracking_events = queue.Queue()
 
     # Load configurations
     config = Config()
@@ -42,6 +43,7 @@ def main(config_file):
     detection_rate: int = 1
     video_downscale: float = 1
     show_detections: bool = True
+    show_trackers: bool = True
 
     # Load video
     video = Video(config.source)
@@ -63,6 +65,17 @@ def main(config_file):
     detector = YOLODetector()
     tracker = MOTKalmanTracker(video.fps)
 
+    def on_track_step(active_tracks):
+        for track in active_tracks:
+            #get zone_id
+            active = roi.in_zone(track.center)
+
+            if active:
+                print(track._id)
+
+    tracking_processor = EventListener(on_track_step, tracking_events)
+    tracking_processor.start()
+
     # Tracking
     def on_frame(frame, step: int):
         # On Start
@@ -71,34 +84,32 @@ def main(config_file):
         # Detect objects
         detections = [] if step % detection_rate != 0 else detector.detect(frame)
 
-        METRIC_DETECTIONS.store(len(detections))
+        METRIC_DETECTIONS.store(len(detections), step)
 
         # Track detected objects
         active_tracks = tracker.step(detections=detections)
 
-        METRIC_TRACKERS.store(len(active_tracks))
+        METRIC_TRACKERS.store(len(active_tracks), step)
 
-        for track in active_tracks:
-            #get zone_id
-            active = roi.in_zone(track.center)
-            color = (0,0,255) if active else (0,255,0)
-            cv2.circle(frame, track.center, 2, color, thickness=-1)
-
-            if active:
-                events.put(Event_TrackerInRoi(track, roi))
+        tracking_events.put(active_tracks)
 
         # Show roi
         frame = roi.plot(frame)
 
-        # visualize detections
+        # Show detections
         if show_detections:
             for det in detections:
                 cv2.rectangle(frame, (int(det.box[0]), int(det.box[1])), (int(det.box[2]), int(det.box[3])), (255, 0, 0), 1)
 
-        # On End
-        METRIC_FPS.stop()
+        # Show trackers
+        if show_trackers:
+            for track in active_tracks:
+                cv2.circle(frame, track.center, 2, (0,255,0), thickness=-1)
 
-        events.put(Event_StepEnd(frame))
+        # On End
+        METRIC_FPS.stop(step)
+
+        screen_events.put(frame)
 
     def read_frame():
         return video.read(downscale=video_downscale, soft=True)
@@ -106,37 +117,36 @@ def main(config_file):
     algorithm = Algorithm(read_frame, on_frame)
     algorithm.start()
 
+    # Process screen events on main thread
     while True:
-        event = events.get()
+        frame = screen_events.get()
 
-        if event is None:
+        if frame is None:
             break
 
-        if isinstance(event, Event_TrackerInRoi):
-            event.save()
-        elif isinstance(event, Event_StepEnd):
-            key = SCREEN_STATS_1.show(METRIC_FPS.plot())
-            if key == ord('q'):
-                break
+        key = SCREEN_STATS_1.show(METRIC_FPS.plot())
+        if key == ord('q'):
+            break
 
-            key = SCREEN_STATS_2.show(METRIC_DETECTIONS.plot())
-            if key == ord('q'):
-                break
+        key = SCREEN_STATS_2.show(METRIC_DETECTIONS.plot())
+        if key == ord('q'):
+            break
 
-            key = SCREEN_STATS_3.show(METRIC_TRACKERS.plot())
-            if key == ord('q'):
-                break
+        key = SCREEN_STATS_3.show(METRIC_TRACKERS.plot())
+        if key == ord('q'):
+            break
 
-            key = SCREEN_PRIMARY.show(event.frame)
-            if key == ord('q'):
-                break
+        key = SCREEN_PRIMARY.show(frame)
+        if key == ord('q'):
+            break
 
     algorithm.stop()
     video.release()
+    tracking_processor.stop()
 
 if __name__ == "__main__":
     # Set up command-line argument parser
-    parser = argparse.ArgumentParser(description='Description of your program')
+    parser = argparse.ArgumentParser(description='UNAV - Master en Big Data Science - Trabajo Final de Master')
     
     # Add command-line arguments
     parser.add_argument('--config', type=str, default='config.ini', help='Configuration File')
