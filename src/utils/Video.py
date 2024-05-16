@@ -17,11 +17,15 @@ class Video():
 
         return self._cap
     
-    def read(self, soft:bool = False):
+    def read(self, soft:bool = False, downscale: float = 1.):
         ret, frame = self._cap.read()
         if not ret and not soft:
             print("Error: Unable to read video.")
             exit()
+
+        # Downscale frame
+        if downscale != 1.:
+            frame = cv2.resize(frame, fx=downscale, fy=downscale, dsize=None, interpolation=cv2.INTER_AREA)
 
         return frame
     

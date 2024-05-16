@@ -1,4 +1,4 @@
-from config.config import Config
+from utils.config import Config
 from motpy.core import Detection
 from ultralytics import YOLO
 
@@ -10,7 +10,7 @@ class YOLODetector:
 
     def __init__(self):
         config = Config()
-        self._detector = YOLO(config.path_assets_dir + '/yolov8n.pt')
+        self._detector = YOLO(config.data_dir + '/yolov8n.pt')
         self._confidence_threshold = float(config.yolo_confidence_threshold)
 
     def detect(self, frame) -> list[Detection]:

@@ -2,10 +2,6 @@ import argparse
 import cv2
 import queue
 
-from config.config import Config
-
-from data.db import DB
-
 from mot.Algorithm import Algorithm
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
@@ -13,6 +9,8 @@ from mot.MOTKalmanTracker import MOTKalmanTracker
 from mot.Events import Event_StepEnd, Event_TrackerInRoi
 from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
 
+from utils.DB import DB
+from utils.config import Config
 from utils.Grid import Grid
 from utils.Video import Video
 from utils.Screen import Screen
@@ -38,16 +36,17 @@ def main(config_file):
     config.load(config_file)
 
     # Database
-    #db = DB()
+    db = DB(config.data_dir + '/tracking.db')
 
-
-    
-    
+    # Tracking options
+    detection_rate: int = 1
+    video_downscale: float = 1
+    show_detections: bool = True
 
     # Load video
     video = Video(config.source)
     video.open()
-    frame = video.read()
+    frame = video.read(downscale=video_downscale)
 
     # Divide frame
     cell_size = int(config.cell_size)
@@ -60,11 +59,6 @@ def main(config_file):
     roi.define(frame)
     #frame = roi.plot(frame)
 
-    # Tracking options
-    detection_rate: int = 1
-    video_downscale: float = 1.
-    show_detections: bool = True
-
     # Start tracking
     detector = YOLODetector()
     tracker = MOTKalmanTracker(video.fps)
@@ -73,11 +67,6 @@ def main(config_file):
     def on_frame(frame, step: int):
         # On Start
         METRIC_FPS.start()
-
-        #save start
-
-        # Downscale frame
-        #frame = cv2.resize(frame, fx=video_downscale, fy=video_downscale, dsize=None, interpolation=cv2.INTER_AREA)
 
         # Detect objects
         detections = [] if step % detection_rate != 0 else detector.detect(frame)
@@ -111,7 +100,10 @@ def main(config_file):
 
         events.put(Event_StepEnd(frame))
 
-    algorithm = Algorithm(video, on_frame)
+    def read_frame():
+        return video.read(downscale=video_downscale, soft=True)
+
+    algorithm = Algorithm(read_frame, on_frame)
     algorithm.start()
 
     while True:
@@ -142,14 +134,12 @@ def main(config_file):
     algorithm.stop()
     video.release()
 
-
-
 if __name__ == "__main__":
     # Set up command-line argument parser
     parser = argparse.ArgumentParser(description='Description of your program')
     
     # Add command-line arguments
-    parser.add_argument('--config', type=str, default='config/config.ini', help='Configuration File')
+    parser.add_argument('--config', type=str, default='config.ini', help='Configuration File')
     
     # Parse command-line arguments
     args = parser.parse_args()

@@ -1,16 +1,13 @@
 import sqlite3
-from config.config import Config
 
 class DB:
     _instance = None
-    _config = None
     _db = None
 
-    def __new__(cls):
+    def __new__(cls, path:str):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._config = Config()
-            cls._db = sqlite3.connect(cls._config.path_data_dir + '/tracking.db')
+            cls._db = sqlite3.connect(path)
 
         return cls._instance
     

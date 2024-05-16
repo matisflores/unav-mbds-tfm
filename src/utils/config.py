@@ -1,7 +1,6 @@
 import configparser
 
 GENERAL='General'
-PATHS='Paths'
 OPENCV='Opencv'
 YOLO='Yolo'
 KALMAN='Kalman'
@@ -26,12 +25,8 @@ class Config:
         self._config.read(file)
 
     @property
-    def path_data_dir(self):
-        return self._config.get(PATHS, 'data_dir')
-    
-    @property
-    def path_assets_dir(self):
-        return self._config.get(PATHS, 'assets_dir')
+    def data_dir(self):
+        return self._config.get(GENERAL, 'data_dir')
     
     @property
     def oc_window_title(self):
