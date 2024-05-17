@@ -22,5 +22,20 @@ class DB:
 
         self._db.commit()
 
+    def load_tracking_ids(self):
+        c = self._db.cursor()
+
+        # Execute query to fetch distinct tracking IDs
+        c.execute("SELECT DISTINCT tracker FROM roi_tracks")
+
+        return [row[0] for row in c.fetchall()]
+    
+    def load_tracking_points(self, tracker):
+        c = self._db.cursor()
+
+        # Retrieve points for the current tracking ID
+        c.execute("SELECT * FROM roi_tracks WHERE tracker=? ORDER BY timestamp", (tracker,))
+        return c.fetchall()
+
     def __del__(self):
         self._db.close()

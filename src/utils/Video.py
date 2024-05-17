@@ -17,11 +17,15 @@ class Video():
 
         return self._cap
     
-    def read(self, soft:bool = False, downscale: float = 1.):
-        ret, frame = self._cap.read()
-        if not ret and not soft:
-            print("Error: Unable to read video.")
-            exit()
+    def read(self, soft:bool = False, downscale: float = 1., skip: int = 0):
+        # Skip frames
+        frame_nro = -1
+        while frame_nro < skip:
+            frame_nro += 1
+            ret, frame = self._cap.read()
+            if not ret and not soft:
+                print("Error: Unable to read video.")
+                exit()
 
         # Downscale frame
         if downscale != 1.:

@@ -1,17 +1,22 @@
+import argparse
 import cv2
-import fire
-import sqlite3
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
+from utils.Grid import Grid
+from utils.Video import Video
+from utils.Config import Config
+from utils.DB import DB
+
+'''
 def roi_stats():
     # Connect to the SQLite database
     conn = sqlite3.connect('data/tracking.db')
     c = conn.cursor()
 
     # Execute query to fetch distinct tracking IDs
-    c.execute('''
+    c.execute('' '
         SELECT 
             tracker,
             MIN(timestamp) AS min_timestamp,
@@ -21,64 +26,16 @@ def roi_stats():
             roi_tracks
         GROUP BY 
             tracker;
-    ''')
+    '' ')
     stats = c.fetchall()
 
     conn.close()
 
     return stats
+'''
 
-def load_tracking_ids():
-    # Connect to the SQLite database
-    conn = sqlite3.connect('data/tracking.db')
-    c = conn.cursor()
-
-    # Execute query to fetch distinct tracking IDs
-    c.execute("SELECT DISTINCT tracker FROM roi_tracks")
-    tracking_ids = [row[0] for row in c.fetchall()]
-
-    conn.close()
-
-    return tracking_ids
-
-def display_points_with_velocity(frame, tracking_ids):
-    # Create a black image
-    #width, height = 800, 600
-    #black_screen = np.zeros((height, width, 3), dtype=np.uint8)
-
-    # Connect to the SQLite database
-    conn = sqlite3.connect('data/tracking.db')
-    c = conn.cursor()
-
-    for tracking_id in tracking_ids:
-        # Generate a unique color for the tracking ID
-        #color = np.random.randint(0, 255, size=(3,)).tolist()
-        color = (0, 0, 255)
-
-        # Retrieve points for the current tracking ID
-        c.execute("SELECT * FROM roi_tracks WHERE tracker=? ORDER BY timestamp", (tracking_id,))
-        points = c.fetchall()
-
-        # Display points on the screen with velocity
-        prev_x, prev_y = None, None
-        for point in points:
-            # Extract point information
-            _, _, x, y, _, _ = point
-
-            # Draw a circle at the point coordinates on the black screen
-            cv2.circle(frame, (x, y), 10, color, -1)  # Use the unique color
-
-            # Update previous point coordinates
-            prev_x, prev_y = x, y
-
-    conn.close()
-
-    # Display the black screen with points
-    cv2.imshow('Points', frame)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-def run():
+def main(config_file):
+    '''
     # Show stats
     results = roi_stats()
 
@@ -103,33 +60,76 @@ def run():
     plt.show()
 
     exit()
+    '''
+
+    # Load configurations
+    config = Config()
+    config.load(config_file)
+
+    # Database
+    db = DB(config.data_dir + '/tracking.db')
 
     # Load video
-    video_path = 'assets/1_jail.mp4'
-    cap = cv2.VideoCapture(video_path)
+    video = Video(config.source)
+    video.open()
+    frame = video.read(skip=100)
 
-    # Check if video opened successfully
-    if not cap.isOpened():
-        print("Error: Unable to open video.")
-        exit()
-
-    # Read first frame
-    ret, frame = cap.read()
-    if not ret:
-        print("Error: Unable to read video.")
-        exit()
-
-    frame_nro = 0
-    frames_skip = 10
-    while frame_nro < frames_skip:
-        _, frame = cap.read()
-        if not ret:
-            print("Error: Unable to read video.")
-            exit()
+    # Divide frame
+    cell_size = int(config.cell_size)
+    grid = Grid(cell_size)
+    grid.divide(frame)
+    #frame = grid.plot(frame)
 
     # Load all tracking IDs from the SQLite table
-    tracking_ids = load_tracking_ids()
-    display_points_with_velocity(frame, tracking_ids)
+    tracking_ids = db.load_tracking_ids()
 
-if __name__ == '__main__':
-    fire.Fire(run)
+    # Create a black image
+    #height, width, _ = frame.shape
+    #frame = np.zeros((height, width, 3), dtype=np.uint8)
+    
+    for tracking_id in tracking_ids:
+        # Generate a unique color for the tracking ID
+        color = np.random.randint(0, 255, size=(3,)).tolist()
+        #color = (0, 0, 255)
+
+        # Retrieve points for the current tracking ID
+        points = db.load_tracking_points(tracking_id)
+
+        # Display points on the screen with velocity
+        for point in points:
+            # Extract point information
+            _,_,id,_ = point
+
+            cell = grid.cell(int(id))
+
+            if cell is None:
+                continue
+
+            x,y,_,_,_ = cell
+            x = int(x)
+            y = int(y)
+            x += int(config.cell_size)/2
+            y += int(config.cell_size)/2
+            # Draw a circle at the point coordinates on the black screen
+            cv2.circle(frame, (int(x), int(y)), 5, color, -1)  # Use the unique color
+
+    frame = grid.plot(frame)
+
+    # Display the black screen with points
+    cv2.imshow('Points', frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    # Set up command-line argument parser
+    parser = argparse.ArgumentParser(description='UNAV - Master en Big Data Science - Trabajo Final de Master')
+    
+    # Add command-line arguments
+    parser.add_argument('--config', type=str, default='config.ini', help='Configuration File')
+    
+    # Parse command-line arguments
+    args = parser.parse_args()
+
+    # Call main function with command-line arguments
+    main(args.config)

@@ -26,6 +26,14 @@ class Grid:
             cv2.rectangle(frame, (x, y), (x + self._cell_size, y + self._cell_size), (255,255,255), 1)
         return frame
     
+    def cell(self, id):
+        cells = [cell for cell in self._cells if cell[3] == id]
+
+        if len(cells) == 1:
+            return cells[0]
+        
+        return None
+    
     @property
     def cells(self):
         return self._cells
