@@ -21,7 +21,15 @@ class MOTKalmanTracker:
             )
         
     def step(self, detections) -> list[Track]:
-        tracks = self._tracker.step(detections=detections)
+        if len(detections) > 0:
+            tracks = self._tracker.step(detections=detections)
+            return [track_from_motpy(track) for track in tracks]
+        
+        # predict state in all trackers
+        for t in self._tracker.trackers:
+            t.predict()
+
+        tracks = self._tracker.active_tracks(**self._tracker.active_tracks_kwargs)
         return [track_from_motpy(track) for track in tracks]
     
     
