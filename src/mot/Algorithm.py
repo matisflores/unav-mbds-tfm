@@ -16,11 +16,11 @@ class Algorithm():
         while True:
             frame = self._read_frame()
 
-            if frame is None or self._stop:
-                break
-
             self._on_frame(frame, step)
             step += 1
+
+            if frame is None or self._stop:
+                break
 
     def start(self):
         if self._thread is None:
