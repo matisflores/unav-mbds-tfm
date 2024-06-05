@@ -14,6 +14,7 @@ class Roi:
     _start = None
     _end = None
     _roi_cells = None
+    _count = 0
 
     def __init__(self, grid: Grid):
         self._grid = grid
@@ -65,12 +66,20 @@ class Roi:
 
     def plot(self, frame, copy=True):
         # Display the frame with selected zones
+        if frame is None:
+            return None
+
         frame = frame.copy() if copy else frame
+
+        cv2.rectangle(frame, self._start, self._end, ROI_SELECTED_COLOR, ROI_THICKNESS)
+        cv2.putText(frame, str(self._count), (self._start[0], self._start[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, ROI_SELECTED_COLOR, ROI_THICKNESS, cv2.LINE_AA)
+        '''
         cell_size = self._grid.cell_size
 
         for cell in self._roi_cells:
             x, y, _, _, _ = cell
             cv2.rectangle(frame, (x, y), (x+cell_size, y+cell_size), ROI_SELECTED_COLOR, ROI_THICKNESS)
+        '''
         
         return frame
     

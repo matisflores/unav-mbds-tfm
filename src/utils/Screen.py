@@ -52,7 +52,7 @@ class Screen:
     def position(self):
         return (self.offset_x, self.offset_y)
     
-    def show(self, frame, delay: int = 1):
+    def show(self, frame, delay: int = 1, wait: bool = True):
         if self.resize:
             frame = cv2.resize(frame, (self.width, self.height))
 
@@ -60,7 +60,7 @@ class Screen:
         cv2.imshow(self.name, frame)
         cv2.moveWindow(self.name, self.offset_x, self.offset_y + self.menu_bar)
 
-        return cv2.waitKey(delay)
+        return cv2.waitKey(delay) if wait else None
     
     def read(self, filename: str, delay: int = 1):
         frame = cv2.imread(filename)

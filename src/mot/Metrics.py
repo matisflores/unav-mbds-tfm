@@ -1,15 +1,16 @@
+import cv2
+import numpy as np
+
+from matplotlib import pyplot as plt
 from collections import deque
 from io import BytesIO
-import cv2
-from matplotlib import pyplot as plt
-import numpy as np
 
 class Metric():
     _steps: deque = None
     _values: deque = None
     _name: str = None
     
-    def __init__(self, name: str, maxlen: int):
+    def __init__(self, name: str, maxlen: int = None):
         self._name = name
         self._steps = deque(maxlen=maxlen)
         self._values = deque(maxlen=maxlen)
@@ -18,10 +19,19 @@ class Metric():
         self._steps.append(step)
         self._values.append(value)
 
-    def plot(self):
+    def each(self, action):
+        for step, value in zip(self._steps, self._values):
+            action(self._name, step, value)
+
+    def plot(self, y_min = None, y_max = None):
         buffer = BytesIO()
+
+        if y_min is not None and y_max is not None:
+            plt.ylim(y_min, y_max)
+            plt.yticks(np.arange(y_min, y_max, 2))
+
         plt.plot(self._steps, self._values)
-        plt.xlabel('Steps')
+        plt.xlabel('Step')
         plt.ylabel(self._name)
         plt.savefig(buffer, format='png')
         plt.clf()

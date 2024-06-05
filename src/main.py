@@ -1,6 +1,9 @@
 import argparse
 import cv2
 import queue
+import os
+
+from datetime import datetime
 
 from mot.Algorithm import Algorithm
 from mot.Detector import YOLODetector
@@ -23,24 +26,28 @@ def main(config_file):
     SCREEN_STATS_3 = Screen('Stats 3', width=0.25, offset_x=0.75, height=0.27, resize=True, offset_y=0.3)
 
     # Metrics
-    maxlen = 100
-    METRIC_FPS = MetricFPS('FPS', maxlen)
-    METRIC_DETECTIONS = MetricDetections('Detections', maxlen)
-    METRIC_TRACKERS = MetricTrackers('Active Trackers', maxlen)
+    METRIC_FPS = MetricFPS('FPS')
+    METRIC_DETECTIONS = MetricDetections('Detections')
+    METRIC_TRACKERS = MetricTrackers('Active Trackers')
 
     # Events
     screen_events = queue.Queue()
+    tracker_events = queue.Queue()
     tracking_events = queue.Queue()
 
     # Load configurations
     config = Config()
     config.load(config_file)
 
+    # Database
+    db_file = config.data_dir + '/' + os.path.basename(config.source) + '_' + datetime.now().strftime("%H%M%S") + '_tracking.db'
+
     # Tracking options
     detection_rate: int = 1
     video_downscale: float = 1
     show_detections: bool = True
     show_trackers: bool = True
+    use_roi: bool = False
 
     # Load video
     video = Video(config.source)
@@ -54,26 +61,51 @@ def main(config_file):
     #frame = grid.plot(frame)
 
     # Roi selection
-    roi = Roi(grid)
-    roi.define(frame)
-    #frame = roi.plot(frame)
+    if use_roi:
+        roi = Roi(grid)
+        roi.define(frame)
+        #frame = roi.plot(frame)
 
     # Start tracking
     detector = YOLODetector()
     tracker = MOTKalmanTracker(video.fps)
 
-    def on_track_step(track):
-        # Database
-        db = DB(config.data_dir + '/tracking.db')
+    track_by_roi = set()
 
-        cell = roi.in_zone(track.center)
+    def on_tracking_event(event):
+        track = event['track']
+        step = event['step']
 
-        if cell is not None:
-            x, y, frame_part, id, _ = cell
-            db.save_tracker_rois(track._id, '1', id)
+        if use_roi:
+            db = DB(db_file)
 
-    tracking_processor = EventListener(on_track_step, tracking_events)
-    tracking_processor.start()
+            cell = roi.in_zone(track.center)
+            if cell is not None:
+                if track._id not in track_by_roi:
+                    track_by_roi.add(track._id)
+                    roi._count = len(track_by_roi)
+                
+                x, y, frame_part, id, _ = cell
+                db.save_tracker_rois(track._id, '1', id, step)
+            else:
+                if track._id in track_by_roi:
+                    track_by_roi.remove(track._id)
+                    roi._count = len(track_by_roi)
+
+    tracking_events_processor = EventListener(on_tracking_event, tracking_events)
+    tracking_events_processor.start()
+
+    def on_tracker_event(event):
+        active_tracks = event['tracks']
+        step = event['step']
+
+        for track in active_tracks:
+            tracking_events.put({ 'step': step, 'track': track })
+
+        METRIC_TRACKERS.store(len(active_tracks), step)
+
+    tracker_events_processor = EventListener(on_tracker_event, tracker_events)
+    tracker_events_processor.start()
 
     # Tracking
     def on_frame(frame, step: int):
@@ -81,18 +113,18 @@ def main(config_file):
         METRIC_FPS.start()
 
         # Detect objects
-        detections = [] if step % detection_rate != 0 else detector.detect(frame)
-        METRIC_DETECTIONS.store(len(detections), step)
+        detections = []
+        if step % detection_rate == 0:
+            detections = detector.detect(frame)
+            METRIC_DETECTIONS.store(len(detections), step)
 
         # Track detected objects
         active_tracks = tracker.step(detections=detections)
-        METRIC_TRACKERS.store(len(active_tracks), step)
-
-        for track in active_tracks:
-            tracking_events.put(track)
+        tracker_events.put({ 'step': step, 'tracks': active_tracks })
 
         # Show roi
-        frame = roi.plot(frame)
+        if use_roi:
+            frame = roi.plot(frame)
 
         # Show detections
         if show_detections:
@@ -102,12 +134,7 @@ def main(config_file):
         # Show trackers
         if show_trackers:
             for track in active_tracks:
-                cell = roi.in_zone(track.center)
-
-                if cell is not None:
-                    cv2.circle(frame, track.center, 2, (0,0,255), thickness=-1)
-                else:    
-                    cv2.circle(frame, track.center, 2, (0,255,0), thickness=-1)
+                cv2.circle(frame, track.center, 2, (0,255,0), thickness=-1)
 
         # On End
         METRIC_FPS.stop(step)
@@ -121,31 +148,37 @@ def main(config_file):
     algorithm.start()
 
     # Process screen events on main thread
+    step = 0
     while True:
         frame = screen_events.get()
 
         if frame is None:
             break
 
-        key = SCREEN_STATS_1.show(METRIC_FPS.plot())
-        if key == ord('q'):
-            break
-
-        key = SCREEN_STATS_2.show(METRIC_DETECTIONS.plot())
-        if key == ord('q'):
-            break
-
-        key = SCREEN_STATS_3.show(METRIC_TRACKERS.plot())
-        if key == ord('q'):
-            break
-
         key = SCREEN_PRIMARY.show(frame)
         if key == ord('q'):
             break
 
+        step += 1
+
+    # Save metrics
+    db = DB(db_file)
+    def save_metric(metric, step, value):
+        db.save_metrics(metric, step, value)
+
+    METRIC_FPS.each(save_metric)
+    METRIC_DETECTIONS.each(save_metric)
+    METRIC_TRACKERS.each(save_metric)
+
+    # Show metrics
+    SCREEN_STATS_1.show(METRIC_FPS.plot(), wait=False)
+    SCREEN_STATS_2.show(METRIC_DETECTIONS.plot(), wait=False)
+    SCREEN_STATS_3.show(METRIC_TRACKERS.plot(), delay=0)
+
     algorithm.stop()
     video.release()
-    tracking_processor.stop()
+    tracker_events_processor.stop()
+    tracking_events_processor.stop()
 
 if __name__ == "__main__":
     # Set up command-line argument parser
