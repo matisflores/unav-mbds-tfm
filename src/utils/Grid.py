@@ -34,6 +34,17 @@ class Grid:
         
         return None
     
+    def in_cell(self, point: tuple):
+        for cell in self._cells:
+            x, y, _, _, _ = cell
+            cell_end_x = x + self.cell_size
+            cell_end_y = y + self.cell_size
+            
+            if x <= point[0] <= cell_end_x and y <= point[1] <= cell_end_y:
+                return cell
+
+        return None
+    
     @property
     def cells(self):
         return self._cells

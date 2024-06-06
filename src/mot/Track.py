@@ -22,3 +22,7 @@ class Track():
     def center_y(self):
         return int((self._box[1] + self._box[3])/2)
       
+    def diff(self, track):
+        diff_x = self.center[0] - track.center[0]
+        diff_y = self.center[1] - track.center[1]
+        return (diff_x, diff_y)

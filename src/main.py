@@ -46,7 +46,7 @@ def main(config_file):
     video_downscale: float = 1
     show_detections: bool = True
     show_trackers: bool = True
-    use_roi: bool = True
+    use_roi: bool = False
 
     # Load video
     video = Video(config.source)
@@ -69,56 +69,30 @@ def main(config_file):
     detector = YOLODetector()
     tracker = MOTKalmanTracker(video.fps)
 
-    track_by_roi = set()
-
     def on_track_event(event):
-        if not use_roi:
-            return
-        
+        db = DB(db_file)
         step = event['step']
         track = track_from_motpy(event['track']) if event['track'] is not None else None
         previous = track_from_motpy(event['previous']) if event['previous'] is not None else None
+        diff = track.diff(previous) if track is not None and previous is not None else None
 
-        db = DB(db_file)
-        current_cell = roi.in_zone(track.center) if track is not None else None
-        last_cell = roi.in_zone(previous.center) if previous is not None else None
-
+        if not use_roi:
+            _, _, _, id, _ = grid.in_cell(track.center) if track is not None else None
+            db.save_track(track._id, track.center, diff, id, step, None)
+            return
+        
+        current_cell = roi.in_cell(track.center) if track is not None else None
+        last_cell = roi.in_cell(previous.center) if previous is not None else None
+        
         if current_cell is not None and last_cell is None:
-            track_by_roi.add(track._id)
-            roi._count = len(track_by_roi)
+            roi._count += 1
             _, _, _, id, _ = current_cell
-            db.save_tracker_rois(track._id, '1', id, step)
+            db.save_track(track._id, track.center, diff, id, step, roi._id)
         elif current_cell is not None and last_cell is not None and current_cell != last_cell:
             _, _, _, id, _ = current_cell
-            db.save_tracker_rois(track._id, '1', id, step)
+            db.save_track(track._id, track.center, diff, id, step, roi._id)
         elif current_cell is None and last_cell is not None:
-            track_by_roi.remove(track._id)
-            roi._count = len(track_by_roi)
-
-
-        '''
-        si esta dentro y no estaba
-            agrego
-        si no esta dentro y estaba
-            elimino
-        si esta dentro y estaba y hubo avance
-            actualizo
-        '''
-
-        '''
-        cell = roi.in_zone(track.center)
-        if cell is not None:
-            if track._id not in track_by_roi:
-                track_by_roi.add(track._id)
-                roi._count = len(track_by_roi)
-            
-            x, y, frame_part, id, _ = cell
-            db.save_tracker_rois(track._id, '1', id, step)
-        else:
-            if track._id in track_by_roi:
-                track_by_roi.remove(track._id)
-                roi._count = len(track_by_roi)
-        '''
+            roi._count -= 1
 
     track_events_processor = EventListener(on_track_event, track_events)
     track_events_processor.start()

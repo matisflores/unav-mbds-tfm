@@ -1,4 +1,5 @@
 import cv2
+import uuid
 
 from utils.Grid import Grid
 
@@ -8,6 +9,7 @@ ROI_SELECTED_COLOR = (0, 200, 0)
 ROI_THICKNESS = 1
 
 class Roi:
+    _id = None
     _grid: Grid = None
     _selecting = False
     _frame = None
@@ -17,6 +19,7 @@ class Roi:
     _count = 0
 
     def __init__(self, grid: Grid):
+        self._id = str(uuid.uuid4())
         self._grid = grid
         self._roi_cells = []
     
@@ -83,21 +86,11 @@ class Roi:
         
         return frame
     
-    def in_zone(self, point: tuple):
-        """
-        Check if a point is inside each selected zone.
-
-        Args:
-            point (tuple): The (x, y) coordinates of the point.
-
-        Returns:
-            bool: True if the point is inside at least one selected zone, False otherwise.
-        """
+    def in_cell(self, point: tuple):
         for cell in self._roi_cells:
             x, y, _, _, _ = cell
-            cell_size = self._grid.cell_size
-            cell_end_x = x + cell_size
-            cell_end_y = y + cell_size
+            cell_end_x = x + self._grid.cell_size
+            cell_end_y = y + self._grid.cell_size
             
             if x <= point[0] <= cell_end_x and y <= point[1] <= cell_end_y:
                 return cell

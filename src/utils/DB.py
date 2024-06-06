@@ -12,42 +12,20 @@ class DB:
         self._db = sqlite3.connect(path)
         
         c = self._db.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, roi TEXT, cell TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS tracks (tracker TEXT, position TEXT, direction TEXT, cell TEXT, step TEXT, roi TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
         self._db.commit()
-
-    '''
-    def __new__(cls, path:str = None):
-        if cls._instance is not None:
-            return cls._instance
-        
-        if path is None:
-            print("DB path cannot be None")
-            exit(0)
-
-        cls._instance = super().__new__(cls)
-        cls._db = sqlite3.connect(path)
-        
-        c = cls._db.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, roi TEXT, cell TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        cls._db.commit()
-
-        return cls._instance
-    '''
     
     def __del__(self):
         self._db.close()
     
-    def save_tracker_rois(self, tracker, roi, cell, step):
+    def save_track(self, tracker, position, direction, cell, step, roi):
         c = self._db.cursor()
-        #c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, roi TEXT, cell TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        c.execute("INSERT INTO roi_tracks (tracker, roi, cell, step) VALUES (?, ?, ?, ?)", (tracker, roi, cell, step))
+        c.execute("INSERT INTO tracks (tracker, position, direction, cell, step, roi) VALUES (?, ?, ?, ?, ?, ?)", (tracker, str(position), str(direction), cell, step, roi))
         self._db.commit()
 
     def save_metrics(self, metric, step, value):
         c = self._db.cursor()
-        #c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("INSERT INTO metrics (metric, step, value) VALUES (?, ?, ?)", (metric, step, value))
         self._db.commit()
 

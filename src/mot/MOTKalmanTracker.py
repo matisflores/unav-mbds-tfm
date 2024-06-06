@@ -10,15 +10,12 @@ def track_from_motpy(track: motpy.core.Track):
     return Track(track.id, track.box, track.score, track.class_id)
 
 def previous_to_dict(previous_tracks):
-    if previous_tracks is None:
-        previous_tracks = []
-
     return {track.id: track for track in previous_tracks}
 
 class MOTKalmanTracker:
     _tracker = None
-    _active_tracks = None
-    _previous_tracks = None
+    _active_tracks = []
+    _previous_tracks = []
 
     def __init__(self, fps):
         config = Config()
