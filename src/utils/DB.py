@@ -4,6 +4,19 @@ class DB:
     _instance = None
     _db = None
 
+    def __init__(self, path:str = None) -> None:
+        if path is None:
+            print("DB path cannot be None")
+            exit(0)
+
+        self._db = sqlite3.connect(path)
+        
+        c = self._db.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS roi_tracks (tracker TEXT, roi TEXT, cell TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        self._db.commit()
+
+    '''
     def __new__(cls, path:str = None):
         if cls._instance is not None:
             return cls._instance
@@ -21,6 +34,7 @@ class DB:
         cls._db.commit()
 
         return cls._instance
+    '''
     
     def __del__(self):
         self._db.close()
