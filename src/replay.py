@@ -34,7 +34,7 @@ def roi_stats():
     return stats
 '''
 
-def main(config_file):
+def main(config_file, db_file):
     '''
     # Show stats
     results = roi_stats()
@@ -67,7 +67,7 @@ def main(config_file):
     config.load(config_file)
 
     # Database
-    db = DB(config.data_dir + '/tracking.db')
+    db = DB(db_file)
 
     # Load video
     video = Video(config.source)
@@ -127,9 +127,14 @@ if __name__ == "__main__":
     
     # Add command-line arguments
     parser.add_argument('--config', type=str, default='config.ini', help='Configuration File')
+    parser.add_argument('--database', type=str, default='', help='Database File')
     
     # Parse command-line arguments
     args = parser.parse_args()
 
+    if args.database == '':
+        print('must provide database file')
+        exit(0)
+
     # Call main function with command-line arguments
-    main(args.config)
+    main(args.config, args.database)
