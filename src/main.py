@@ -7,7 +7,7 @@ from datetime import datetime
 
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
-from mot.MOTKalmanTracker import MOTKalmanTracker, track_from_motpy, previous_to_dict
+from mot.MultiObjectTracker import MultiObjectTracker, track_from_motpy, previous_to_dict
 from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
 
 from utils.Config import Config
@@ -67,7 +67,7 @@ def main(config_file):
 
     # Start tracking
     detector = YOLODetector()
-    tracker = MOTKalmanTracker(video.fps)
+    tracker = MultiObjectTracker.make('gh', video.fps)
 
     def on_track_event(event):
         db = DB(db_file)
