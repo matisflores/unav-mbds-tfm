@@ -71,3 +71,9 @@ class MetricDetections(Metric):
 
 class MetricTrackers(Metric):
     pass
+
+class MetricTrackerErrors(Metric):
+    pass
+
+class MetricTrackersDelta(Metric):
+    pass

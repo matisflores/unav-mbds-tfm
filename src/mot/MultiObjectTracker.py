@@ -1,9 +1,10 @@
 import motpy
+import numpy as np
 
 from typing import Dict
 
 from mot.Track import Track
-from mot.Trackers import GHTracker
+from mot.Trackers import GHTracker, KalmanTracker, ParticleTracker
 from utils.Config import Config
 
 def track_from_motpy(track: motpy.core.Track):
@@ -43,7 +44,7 @@ class MultiObjectTracker():
         self._previous_tracks = self._active_tracks
         self._active_tracks = active_tracks
 
-        return self._active_tracks
+        return self._active_tracks, (len(self._active_tracks) - len(self._previous_tracks))
 
     def step(self, detections) -> list[motpy.core.Track]:
         if len(detections) > 0:
@@ -54,6 +55,19 @@ class MultiObjectTracker():
             t.predict()
 
         return self.update_tracks(self._tracker.active_tracks(**self._tracker.active_tracks_kwargs))
+    
+    def error(self):
+        errors = []
+
+        for t in self._tracker.trackers:
+            errors.append(t.error()[1])
+
+        errors = [e for e in errors if e is not None]
+
+        if len(errors) > 0:
+            return (np.min(errors), np.mean(errors), np.max(errors), np.mean([e**2 for e in errors]))
+        
+        return None
 
     @staticmethod
     def make(type: str, fps: int):
@@ -63,7 +77,7 @@ class MultiObjectTracker():
         if type == 'KALMAN':
             return MultiObjectTracker(_MultiObjectTracker(
                 dt=1 / fps,
-                tracker_clss=motpy.tracker.KalmanTracker,
+                tracker_clss=KalmanTracker,
                 tracker_kwargs={'max_staleness': 5},
                 model_spec={'order_pos': 1, 'dim_pos': 2, 'order_size': 0, 'dim_size': 2, 'q_var_pos': 5000., 'r_var_pos': 0.1},
                 matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
@@ -78,3 +92,12 @@ class MultiObjectTracker():
                 matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
                 active_tracks_kwargs={'min_steps_alive': int(config.kalman_min_steps_alive)}
             ))
+        elif type == 'PARTICLE':
+            return MultiObjectTracker(_MultiObjectTracker(
+                dt=1 / fps,
+                tracker_clss=ParticleTracker,
+                tracker_kwargs={'max_staleness': 5},
+                model_spec={},
+                matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
+                active_tracks_kwargs={'min_steps_alive': int(config.kalman_min_steps_alive)}
+            ))            

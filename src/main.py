@@ -8,7 +8,7 @@ from datetime import datetime
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
 from mot.MultiObjectTracker import MultiObjectTracker, track_from_motpy, previous_to_dict
-from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
+from mot.Metrics import MetricDetections, MetricFPS, MetricTrackerErrors, MetricTrackers, MetricTrackersDelta
 
 from utils.Config import Config
 from utils.DB import DB
@@ -28,6 +28,8 @@ def main(config_file):
     METRIC_FPS = MetricFPS('FPS')
     METRIC_DETECTIONS = MetricDetections('Detections')
     METRIC_TRACKERS = MetricTrackers('Active Trackers')
+    METRIC_ERRORS = MetricTrackerErrors('Tracker Errors')
+    METRIC_TRACKERSDELTA = MetricTrackersDelta('Trackers Delta')
 
     # Events
     screen_events = queue.Queue()
@@ -39,10 +41,10 @@ def main(config_file):
     config.load(config_file)
 
     # Database
-    db_file = config.data_dir + '/' + os.path.basename(config.source) + '_' + datetime.now().strftime("%H%M%S") + '_tracking.db'
+    db_file = config.data_dir + '/' + os.path.basename(config.source) + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tracking.db'
 
     # Tracking options
-    detection_rate: int = 1
+    detection_rate: int = 2
     video_downscale: float = 1
     show_detections: bool = True
     show_trackers: bool = True
@@ -67,7 +69,7 @@ def main(config_file):
 
     # Start tracking
     detector = YOLODetector()
-    tracker = MultiObjectTracker.make('gh', video.fps)
+    tracker = MultiObjectTracker.make('particle', video.fps)
 
     def on_track_event(event):
         db = DB(db_file)
@@ -76,21 +78,29 @@ def main(config_file):
         previous = track_from_motpy(event['previous']) if event['previous'] is not None else None
         diff = track.diff(previous) if track is not None and previous is not None else None
 
+        if track is None:
+            return
+
         if not use_roi:
-            _, _, _, id, _ = grid.in_cell(track.center) if track is not None else None
-            db.save_track(track._id, track.center, diff, id, step, None)
+            cell = grid.in_cell(track.center)
+
+            if cell is None:
+                return
+
+            _, _, _, id, _ = cell
+            db.save_track(track._id, track.center, diff, id, step, None, track._score)
             return
         
-        current_cell = roi.in_cell(track.center) if track is not None else None
+        current_cell = roi.in_cell(track.center)
         last_cell = roi.in_cell(previous.center) if previous is not None else None
         
         if current_cell is not None and last_cell is None:
             roi._count += 1
             _, _, _, id, _ = current_cell
-            db.save_track(track._id, track.center, diff, id, step, roi._id)
+            db.save_track(track._id, track.center, diff, id, step, roi._id, track._score)
         elif current_cell is not None and last_cell is not None and current_cell != last_cell:
             _, _, _, id, _ = current_cell
-            db.save_track(track._id, track.center, diff, id, step, roi._id)
+            db.save_track(track._id, track.center, diff, id, step, roi._id, track._score)
         elif current_cell is None and last_cell is not None:
             roi._count -= 1
 
@@ -122,8 +132,14 @@ def main(config_file):
             METRIC_DETECTIONS.store(len(detections), step)
 
         # Track detected objects
-        active_tracks = tracker.step(detections=detections)
+        active_tracks, delta_trackers = tracker.step(detections=detections)
         tracker_events.put({ 'step': step, 'tracks': active_tracks, 'previous': tracker._previous_tracks })
+
+        METRIC_TRACKERSDELTA.store(delta_trackers, step)
+
+        error = tracker.error()
+        if error is not None:
+            METRIC_ERRORS.store(error[1], step)
 
         # Show roi
         if use_roi:
@@ -169,10 +185,13 @@ def main(config_file):
     METRIC_FPS.each(db.save_metrics)
     METRIC_DETECTIONS.each(db.save_metrics)
     METRIC_TRACKERS.each(db.save_metrics)
+    METRIC_ERRORS.each(db.save_metrics)
+    METRIC_TRACKERSDELTA.each(db.save_metrics)
 
     # Show metrics
     SCREEN_STATS_1.show(METRIC_FPS.plot(), wait=False)
-    SCREEN_STATS_2.show(METRIC_DETECTIONS.plot(), wait=False)
+    #SCREEN_STATS_2.show(METRIC_DETECTIONS.plot(), wait=False)
+    SCREEN_STATS_2.show(METRIC_ERRORS.plot(), wait=False)
     SCREEN_STATS_3.show(METRIC_TRACKERS.plot(), delay=0)
 
     video_processor.stop()

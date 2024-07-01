@@ -1,13 +1,24 @@
 import argparse
+import glob
+import os
 import cv2
+import re
 from datetime import datetime
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from utils.Grid import Grid
 from utils.Video import Video
 from utils.Config import Config
 from utils.DB import DB
+
+def colorFader(value):
+    c1 = 'red'
+    c2 = 'green'
+    c1 = np.array(mpl.colors.to_rgb(c1))
+    c2 = np.array(mpl.colors.to_rgb(c2))
+    return (1-value)*c1 + value*c2
 
 '''
 def roi_stats():
@@ -72,14 +83,49 @@ def main(config_file, db_file):
     # Load video
     video = Video(config.source)
     video.open()
-    frame = video.read(skip=100)
+    frame = video.read(skip=0)
 
     # Divide frame
     cell_size = int(config.cell_size)
     grid = Grid(cell_size)
     grid.divide(frame)
-    #frame = grid.plot(frame)
 
+    #cell_score
+    cell_scores = db.load_cell_scores()
+    cell_scores = {cell[0]: cell[1] for cell in cell_scores}
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_scores.get(str(cell[3]),0)) for cell in grid._cells]
+
+    #frame = grid.plot(frame)
+    blue = np.full((grid.cell_size,grid.cell_size,3), (50,0,0), np.uint8)
+    frame_scores = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_scores[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, blue, score, 0.0)
+
+    cv2.imwrite(re.sub('\.db', '_cell_scores.jpg', db_file), frame_scores)
+    #cv2.imshow('Points', frame_scores)
+
+
+    #cell_qty
+    cell_qty = db.load_cell_qty()
+    cell_qty = {cell[0]: cell[1] for cell in cell_qty}
+
+    factor=1.0/max(cell_qty.values())
+    for k in cell_qty:
+        cell_qty[k] = cell_qty[k]*factor
+    
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_qty.get(str(cell[3]),0)) for cell in grid._cells]
+
+    #frame = grid.plot(frame)
+    green = np.full((grid.cell_size,grid.cell_size,3), (0,50,0), np.uint8)
+    frame_qty = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_qty[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, green, score, 0.0)
+
+    cv2.imwrite(re.sub('\.db', '_cell_qty.jpg', db_file), frame_qty)
+    #cv2.imshow('Points', frame_qty)
+
+
+    '''
     # Load all tracking IDs from the SQLite table
     tracking_ids = db.load_tracking_ids()
 
@@ -112,12 +158,11 @@ def main(config_file, db_file):
             y += int(config.cell_size)/2
             # Draw a circle at the point coordinates on the black screen
             cv2.circle(frame, (int(x), int(y)), 5, color, -1)  # Use the unique color
-
-    frame = grid.plot(frame)
+    '''
 
     # Display the black screen with points
-    cv2.imshow('Points', frame)
-    cv2.waitKey(0)
+    #cv2.imshow('Points', frame)
+    #cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
@@ -133,8 +178,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.database == '':
-        print('must provide database file')
-        exit(0)
+        config = Config()
+        config.load(args.config)
+        list_of_files = glob.glob(config.data_dir + '/' + os.path.basename(config.source) + '*.db') # * means all if need specific format then *.csv
+        args.database = max(list_of_files, key=os.path.getctime)
 
     # Call main function with command-line arguments
     main(args.config, args.database)
