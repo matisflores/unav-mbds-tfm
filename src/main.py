@@ -1,4 +1,5 @@
 import argparse
+import shutil
 import cv2
 import queue
 import os
@@ -7,8 +8,8 @@ from datetime import datetime
 
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
-from mot.MOTKalmanTracker import MOTKalmanTracker, track_from_motpy, previous_to_dict
-from mot.Metrics import MetricDetections, MetricFPS, MetricTrackers
+from mot.MultiObjectTracker import MultiObjectTracker, track_from_motpy, previous_to_dict
+from mot.Metrics import MetricDetections, MetricFPS, MetricTrackerErrors, MetricTrackers, MetricTrackersDelta, frame_cell_scores, frame_cell_traffic, stats_tracking_duration
 
 from utils.Config import Config
 from utils.DB import DB
@@ -28,6 +29,8 @@ def main(config_file):
     METRIC_FPS = MetricFPS('FPS')
     METRIC_DETECTIONS = MetricDetections('Detections')
     METRIC_TRACKERS = MetricTrackers('Active Trackers')
+    METRIC_ERRORS = MetricTrackerErrors('Tracker Errors')
+    METRIC_TRACKERSDELTA = MetricTrackersDelta('Trackers Delta')
 
     # Events
     screen_events = queue.Queue()
@@ -38,24 +41,36 @@ def main(config_file):
     config = Config()
     config.load(config_file)
 
-    # Database
-    db_file = config.data_dir + '/' + os.path.basename(config.source) + '_' + datetime.now().strftime("%H%M%S") + '_tracking.db'
+    # Output Directoy
+    DIRECTORY_NAME = os.path.basename(config.get('source')) + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
+    DIRECTORY_BASE = os.path.join(os.path.dirname(config.get('source')), DIRECTORY_NAME)
+    os.makedirs(DIRECTORY_BASE, exist_ok=True)
+
+    # Files
+    FILE_DATABASE = DIRECTORY_BASE + '/tracking.db'
+    FILE_FRAMES = DIRECTORY_BASE + '/frames'
+
+    # Directories
+    os.makedirs(FILE_FRAMES, exist_ok=True)
+
+    # Backup files
+    shutil.copy(config_file, DIRECTORY_BASE)
+    shutil.copy(config.get('source'), DIRECTORY_BASE)    
 
     # Tracking options
-    detection_rate: int = 1
-    video_downscale: float = 1
-    show_detections: bool = True
-    show_trackers: bool = True
-    use_roi: bool = False
+    detection_rate: int = config.get('detection_rate', int)
+    video_downscale: float = config.get('video_downscale', float)
+    show_detections: bool = config.get('show_detections', bool)
+    show_trackers: bool = config.get('show_trackers', bool)
+    use_roi: bool = config.get('use_roi', bool)
 
     # Load video
-    video = Video(config.source)
+    video = Video(config.get('source'))
     video.open()
     frame = video.read(downscale=video_downscale)
 
     # Divide frame
-    cell_size = int(config.cell_size)
-    grid = Grid(cell_size)
+    grid = Grid(config.get('cell_size', int))
     grid.divide(frame)
     #frame = grid.plot(frame)
 
@@ -67,30 +82,39 @@ def main(config_file):
 
     # Start tracking
     detector = YOLODetector()
-    tracker = MOTKalmanTracker(video.fps)
+    tracker = MultiObjectTracker.make(config.get('tracker'), video.fps)
 
     def on_track_event(event):
-        db = DB(db_file)
+        db = DB(FILE_DATABASE)
         step = event['step']
         track = track_from_motpy(event['track']) if event['track'] is not None else None
         previous = track_from_motpy(event['previous']) if event['previous'] is not None else None
         diff = track.diff(previous) if track is not None and previous is not None else None
+        timestamp = cv2.getTickCount()
+
+        if track is None:
+            return
 
         if not use_roi:
-            _, _, _, id, _ = grid.in_cell(track.center) if track is not None else None
-            db.save_track(track._id, track.center, diff, id, step, None)
+            cell = grid.in_cell(track.center)
+
+            if cell is None:
+                return
+
+            _, _, _, id, _ = cell
+            db.save_track(track._id, track.center, diff, id, step, None, track._score, timestamp)
             return
         
-        current_cell = roi.in_cell(track.center) if track is not None else None
+        current_cell = roi.in_cell(track.center)
         last_cell = roi.in_cell(previous.center) if previous is not None else None
         
         if current_cell is not None and last_cell is None:
             roi._count += 1
             _, _, _, id, _ = current_cell
-            db.save_track(track._id, track.center, diff, id, step, roi._id)
+            db.save_track(track._id, track.center, diff, id, step, roi._id, track._score, timestamp)
         elif current_cell is not None and last_cell is not None and current_cell != last_cell:
             _, _, _, id, _ = current_cell
-            db.save_track(track._id, track.center, diff, id, step, roi._id)
+            db.save_track(track._id, track.center, diff, id, step, roi._id, track._score, timestamp)
         elif current_cell is None and last_cell is not None:
             roi._count -= 1
 
@@ -122,8 +146,14 @@ def main(config_file):
             METRIC_DETECTIONS.store(len(detections), step)
 
         # Track detected objects
-        active_tracks = tracker.step(detections=detections)
+        active_tracks, delta_trackers = tracker.step(detections=detections)
         tracker_events.put({ 'step': step, 'tracks': active_tracks, 'previous': tracker._previous_tracks })
+
+        METRIC_TRACKERSDELTA.store(delta_trackers, step)
+
+        error = tracker.error()
+        if error is not None:
+            METRIC_ERRORS.store(error[1], step)
 
         # Show roi
         if use_roi:
@@ -158,27 +188,46 @@ def main(config_file):
         if frame is None:
             break
 
-        key = SCREEN_PRIMARY.show(frame)
+        key = SCREEN_PRIMARY.show(frame, filename=FILE_FRAMES + f'/{step}.jpg')
         if key == ord('q'):
             break
 
         step += 1
 
+    video_processor.stop()
+    tracker_events_processor.stop()
+    track_events_processor.stop()
+
     # Save metrics
-    db = DB(db_file)
+    db = DB(FILE_DATABASE)
     METRIC_FPS.each(db.save_metrics)
     METRIC_DETECTIONS.each(db.save_metrics)
     METRIC_TRACKERS.each(db.save_metrics)
+    METRIC_ERRORS.each(db.save_metrics)
+    METRIC_TRACKERSDELTA.each(db.save_metrics)
 
+    # Rewind video
+    video.rewind()
+    frame = video.read(downscale=video_downscale)
+
+    # Save metrics image
+    cv2.imwrite(DIRECTORY_BASE + '/cell_scores.jpg', frame_cell_scores(FILE_DATABASE, frame, grid, (50,0,0)))
+    cv2.imwrite(DIRECTORY_BASE + '/cell_qty.jpg', frame_cell_traffic(FILE_DATABASE, frame, grid, (0,50,0)))
+    cv2.imwrite(DIRECTORY_BASE + '/trackers_duration.jpg', stats_tracking_duration(FILE_DATABASE))
+    cv2.imwrite(DIRECTORY_BASE + '/FPS.jpg', METRIC_FPS.plot())
+    cv2.imwrite(DIRECTORY_BASE + '/detections.jpg', METRIC_DETECTIONS.plot())
+    cv2.imwrite(DIRECTORY_BASE + '/trackers_errors.jpg', METRIC_ERRORS.plot())
+    cv2.imwrite(DIRECTORY_BASE + '/trackers_active.jpg', METRIC_TRACKERS.plot())
+    cv2.imwrite(DIRECTORY_BASE + '/trackers_delta.jpg', METRIC_TRACKERSDELTA.plot())
+
+    # Close video
+    video.release()
+    
     # Show metrics
     SCREEN_STATS_1.show(METRIC_FPS.plot(), wait=False)
-    SCREEN_STATS_2.show(METRIC_DETECTIONS.plot(), wait=False)
+    #SCREEN_STATS_2.show(METRIC_DETECTIONS.plot(), wait=False)
+    SCREEN_STATS_2.show(METRIC_ERRORS.plot(), wait=False)
     SCREEN_STATS_3.show(METRIC_TRACKERS.plot(), delay=0)
-
-    video_processor.stop()
-    video.release()
-    tracker_events_processor.stop()
-    track_events_processor.stop()
 
 if __name__ == "__main__":
     # Set up command-line argument parser

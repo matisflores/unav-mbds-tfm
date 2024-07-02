@@ -1,7 +1,12 @@
 import argparse
+import glob
+from io import BytesIO
+import os
 import cv2
+import re
 from datetime import datetime
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from utils.Grid import Grid
@@ -9,36 +14,49 @@ from utils.Video import Video
 from utils.Config import Config
 from utils.DB import DB
 
-'''
-def roi_stats():
-    # Connect to the SQLite database
-    conn = sqlite3.connect('data/tracking.db')
-    c = conn.cursor()
+def frame_cell_scores(db_file: str, frame, grid: Grid, color):
+    db = DB(db_file)
+    cell_scores = db.load_cell_scores()
+    cell_scores = {cell[0]: cell[1] for cell in cell_scores}
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_scores.get(cell[3],0)) for cell in grid._cells]
 
-    # Execute query to fetch distinct tracking IDs
-    c.execute('' '
-        SELECT 
-            tracker,
-            MIN(timestamp) AS min_timestamp,
-            MAX(timestamp) AS max_timestamp,
-            (strftime('%s', MAX(timestamp)) - strftime('%s', MIN(timestamp))) AS timestamp_difference
-        FROM 
-            roi_tracks
-        GROUP BY 
-            tracker;
-    '' ')
-    stats = c.fetchall()
+    blue = np.full((grid.cell_size,grid.cell_size,3), color, np.uint8)
+    frame_scores = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_scores[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, blue, score, 0.0)
 
-    conn.close()
+    return frame_scores
 
-    return stats
-'''
+def frame_cell_traffic(db_file, frame, grid: Grid, color):
+    db = DB(db_file)
+    cell_qty = db.load_cell_qty()
+    cell_qty = {cell[0]: cell[1] for cell in cell_qty}
 
-def main(config_file, db_file):
+    scale = 1.0/max(cell_qty.values())
+    for k in cell_qty:
+        cell_qty[k] = cell_qty[k] * scale
+    
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_qty.get(cell[3],0)) for cell in grid._cells]
+
+    green = np.full((grid.cell_size,grid.cell_size,3), color, np.uint8)
+    frame_qty = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_qty[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, green, score, 0.0)
+
+    return frame_qty
+
+def stats_tracking_duration(db_file):
+    def timestamp_diff_to_sec(timestamp_difference):
+        return int(cv2.getTickFrequency() / timestamp_difference) if timestamp_difference != 0 else 0
+
+
+    buffer = BytesIO()
+    db = DB(db_file)
+    results = db.load_tracking_duration()
+
+    results = [(row[0], row[1], row[2], timestamp_diff_to_sec(row[3])) for row in results]
+
     '''
-    # Show stats
-    results = roi_stats()
-
     # Print the formatted results
     for row in results:
         tracker, min_timestamp, max_timestamp, timestamp_difference = row
@@ -47,39 +65,27 @@ def main(config_file, db_file):
         print(f"Maximum Timestamp: {max_timestamp}")
         print(f"Timestamp Difference (seconds): {timestamp_difference}")
         print()
+    '''
 
     # Fetch the timestamp differences
     timestamp_differences = [row[3] for row in results]
 
     # Plot the distribution
-    plt.hist(timestamp_differences, bins=20, color='skyblue', edgecolor='black')
-    plt.title('Distribution of Timestamp Differences')
-    plt.xlabel('Timestamp Difference (minutes)')
+    #plt.hist(timestamp_differences, color='skyblue', edgecolor='black')
+    plt.boxplot(timestamp_differences)
+    plt.title('Distribution of Trackers duration')
+    plt.xlabel('Timestamp Difference (seconds)')
     plt.ylabel('Frequency')
     plt.grid(True)
-    plt.show()
+    #plt.show()
+    plt.savefig(buffer, format='png')
+    plt.clf()
+    buffer.seek(0)
+    time_series_img = np.asarray(bytearray(buffer.read()), dtype=np.uint8)
+    return cv2.imdecode(time_series_img, cv2.IMREAD_COLOR)
 
-    exit()
+def main(config_file, db_file):
     '''
-
-    # Load configurations
-    config = Config()
-    config.load(config_file)
-
-    # Database
-    db = DB(db_file)
-
-    # Load video
-    video = Video(config.source)
-    video.open()
-    frame = video.read(skip=100)
-
-    # Divide frame
-    cell_size = int(config.cell_size)
-    grid = Grid(cell_size)
-    grid.divide(frame)
-    #frame = grid.plot(frame)
-
     # Load all tracking IDs from the SQLite table
     tracking_ids = db.load_tracking_ids()
 
@@ -112,13 +118,34 @@ def main(config_file, db_file):
             y += int(config.cell_size)/2
             # Draw a circle at the point coordinates on the black screen
             cv2.circle(frame, (int(x), int(y)), 5, color, -1)  # Use the unique color
+    '''
+    # Load configurations
+    config = Config()
+    config.load(config_file)
 
-    frame = grid.plot(frame)
+    # Load video
+    video = Video(config.get('source'))
+    video.open()
+    frame = video.read(skip=0)
+
+    # Divide frame
+    grid = Grid(config.get('cell_size', int))
+    grid.divide(frame)
+
+    #frame = grid.plot(frame)
+
+    cv2.imwrite(re.sub('\.db', '_cell_scores.jpg', db_file), frame_cell_scores(db_file, frame, grid, (50,0,0)))
+    #cv2.imshow('Points', frame_scores)
+
+    cv2.imwrite(re.sub('\.db', '_cell_qty.jpg', db_file), frame_cell_traffic(db_file, frame, grid, (0,50,0)))
+    #cv2.imshow('Points', frame_qty)
 
     # Display the black screen with points
-    cv2.imshow('Points', frame)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    #cv2.imshow('Points', frame)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
+
+    video.release()
 
 
 if __name__ == "__main__":
@@ -133,8 +160,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.database == '':
-        print('must provide database file')
-        exit(0)
+        config = Config()
+        config.load(args.config)
+        list_of_files = glob.glob(config.get('data_dir') + '/' + os.path.basename(config.get('source')) + '*.db') # * means all if need specific format then *.csv
+        args.database = max(list_of_files, key=os.path.getctime)
 
     # Call main function with command-line arguments
     main(args.config, args.database)

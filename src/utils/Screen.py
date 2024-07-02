@@ -52,9 +52,12 @@ class Screen:
     def position(self):
         return (self.offset_x, self.offset_y)
     
-    def show(self, frame, delay: int = 1, wait: bool = True):
+    def show(self, frame, delay: int = 1, wait: bool = True, filename: str = None):
         if self.resize:
             frame = cv2.resize(frame, (self.width, self.height))
+
+        if filename is not None:
+            cv2.imwrite(filename, frame)
 
         cv2.namedWindow(self.name, cv2.WINDOW_NORMAL)
         cv2.imshow(self.name, frame)

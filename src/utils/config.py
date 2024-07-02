@@ -1,9 +1,6 @@
 import configparser
 
-GENERAL='General'
-OPENCV='Opencv'
-YOLO='Yolo'
-KALMAN='Kalman'
+GENERAL='general'
 
 class Config:
     _instance = None
@@ -24,30 +21,5 @@ class Config:
         self._config = configparser.ConfigParser()
         self._config.read(file)
 
-    @property
-    def data_dir(self):
-        return self._config.get(GENERAL, 'data_dir')
-    
-    @property
-    def oc_window_title(self):
-        return self._config.get(OPENCV, 'window_title')
-    
-    @property
-    def cell_size(self):
-        return self._config.get(GENERAL, 'cell_size')
-    
-    @property
-    def source(self):
-        return self._config.get(GENERAL, 'source')
-    
-    @property
-    def yolo_confidence_threshold(self):
-        return self._config.get(YOLO, 'confidence_threshold')
-    
-    @property
-    def kalman_min_iou(self):
-        return self._config.get(KALMAN, 'min_iou')
-    
-    @property
-    def kalman_min_steps_alive(self):
-        return self._config.get(KALMAN, 'min_steps_alive')
+    def get(self, option: str, type = str, section: str = GENERAL):
+        return type(self._config.get(section, option))
