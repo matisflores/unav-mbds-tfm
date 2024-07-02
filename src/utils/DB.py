@@ -12,16 +12,16 @@ class DB:
         self._db = sqlite3.connect(path)
         
         c = self._db.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS tracks (tracker TEXT, position TEXT, direction TEXT, cell TEXT, step TEXT, roi TEXT, score TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step TEXT, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS tracks (tracker TEXT, position TEXT, direction TEXT, cell INTEGER, step INTEGER, roi TEXT, score REAL, 'timestamp' INTEGER)")
+        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step INTEGER, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
         self._db.commit()
     
     def __del__(self):
         self._db.close()
     
-    def save_track(self, tracker, position, direction, cell, step, roi, score):
+    def save_track(self, tracker, position, direction, cell, step, roi, score, timestamp):
         c = self._db.cursor()
-        c.execute("INSERT INTO tracks (tracker, position, direction, cell, step, roi, score) VALUES (?, ?, ?, ?, ?, ?, ?)", (tracker, str(position), str(direction), cell, step, roi, score))
+        c.execute("INSERT INTO tracks (tracker, position, direction, cell, step, roi, score, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (tracker, str(position), str(direction), cell, step, roi, score, timestamp))
         self._db.commit()
 
     def save_metrics(self, metric, step, value):
@@ -40,6 +40,24 @@ class DB:
         c.execute("SELECT cell, count(1) as qty FROM tracks GROUP BY cell")
 
         return [row for row in c.fetchall()]
+    
+    def load_tracking_duration(self):
+        c = self._db.cursor()
+
+        c.execute("""
+            SELECT 
+                tracker,
+                MIN(timestamp) AS min_timestamp,
+                MAX(timestamp) AS max_timestamp,
+                (MAX(timestamp) - MIN(timestamp)) AS timestamp_difference
+            FROM 
+                tracks
+            GROUP BY 
+                tracker;
+        """)
+
+        return [row for row in c.fetchall()]
+
 
     def load_tracking_ids(self):
         c = self._db.cursor()

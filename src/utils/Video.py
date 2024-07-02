@@ -36,6 +36,10 @@ class Video():
     
     def release(self):
         self._cap.release()
+
+    def rewind(self):
+        self.release()
+        self.open()
     
     @property
     def path(self):
