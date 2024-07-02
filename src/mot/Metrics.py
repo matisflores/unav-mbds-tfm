@@ -5,6 +5,78 @@ from matplotlib import pyplot as plt
 from collections import deque
 from io import BytesIO
 
+from utils.DB import DB
+from utils.Grid import Grid
+
+def frame_cell_scores(db_file: str, frame, grid: Grid, color):
+    db = DB(db_file)
+    cell_scores = db.load_cell_scores()
+    cell_scores = {cell[0]: cell[1] for cell in cell_scores}
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_scores.get(cell[3],0)) for cell in grid._cells]
+
+    blue = np.full((grid.cell_size,grid.cell_size,3), color, np.uint8)
+    frame_scores = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_scores[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, blue, score, 0.0)
+
+    return frame_scores
+
+def frame_cell_traffic(db_file, frame, grid: Grid, color):
+    db = DB(db_file)
+    cell_qty = db.load_cell_qty()
+    cell_qty = {cell[0]: cell[1] for cell in cell_qty}
+
+    scale = 1.0/max(cell_qty.values())
+    for k in cell_qty:
+        cell_qty[k] = cell_qty[k] * scale
+    
+    grid._cells = [(cell[0],cell[1],cell[2],cell[3],cell_qty.get(cell[3],0)) for cell in grid._cells]
+
+    green = np.full((grid.cell_size,grid.cell_size,3), color, np.uint8)
+    frame_qty = frame.copy()
+    for x, y, img, _, score in grid._cells:
+        frame_qty[y:y+grid.cell_size, x:x+grid.cell_size] = cv2.addWeighted(img, 1, green, score, 0.0)
+
+    return frame_qty
+
+def stats_tracking_duration(db_file):
+    def timestamp_diff_to_sec(timestamp_difference):
+        return int(cv2.getTickFrequency() / timestamp_difference) if timestamp_difference != 0 else 0
+
+
+    buffer = BytesIO()
+    db = DB(db_file)
+    results = db.load_tracking_duration()
+
+    results = [(row[0], row[1], row[2], timestamp_diff_to_sec(row[3])) for row in results]
+
+    '''
+    # Print the formatted results
+    for row in results:
+        tracker, min_timestamp, max_timestamp, timestamp_difference = row
+        print(f"Tracker: {tracker}")
+        print(f"Minimum Timestamp: {min_timestamp}")
+        print(f"Maximum Timestamp: {max_timestamp}")
+        print(f"Timestamp Difference (seconds): {timestamp_difference}")
+        print()
+    '''
+
+    # Fetch the timestamp differences
+    timestamp_differences = [row[3] for row in results]
+
+    # Plot the distribution
+    #plt.hist(timestamp_differences, color='skyblue', edgecolor='black')
+    plt.boxplot(timestamp_differences)
+    plt.title('Distribution of Trackers duration')
+    plt.xlabel('Timestamp Difference (seconds)')
+    plt.ylabel('Frequency')
+    plt.grid(True)
+    plt.savefig(buffer, format='png')
+    plt.clf()
+    buffer.seek(0)
+    time_series_img = np.asarray(bytearray(buffer.read()), dtype=np.uint8)
+    return cv2.imdecode(time_series_img, cv2.IMREAD_COLOR)
+
 class Metric():
     _steps: deque = None
     _values: deque = None

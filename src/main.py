@@ -9,7 +9,7 @@ from datetime import datetime
 from mot.Detector import YOLODetector
 from mot.Roi import Roi
 from mot.MultiObjectTracker import MultiObjectTracker, track_from_motpy, previous_to_dict
-from mot.Metrics import MetricDetections, MetricFPS, MetricTrackerErrors, MetricTrackers, MetricTrackersDelta
+from mot.Metrics import MetricDetections, MetricFPS, MetricTrackerErrors, MetricTrackers, MetricTrackersDelta, frame_cell_scores, frame_cell_traffic, stats_tracking_duration
 
 from utils.Config import Config
 from utils.DB import DB
@@ -17,7 +17,6 @@ from utils.EventListener import EventListener
 from utils.Grid import Grid
 from utils.Screen import Screen
 from utils.Video import Video, VideoProcessor
-from replay import frame_cell_scores, frame_cell_traffic, stats_tracking_duration
 
 def main(config_file):
     # Screen Layout
@@ -43,8 +42,8 @@ def main(config_file):
     config.load(config_file)
 
     # Output Directoy
-    DIRECTORY_NAME = os.path.basename(config.source) + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
-    DIRECTORY_BASE = os.path.join(os.path.dirname(config.source), DIRECTORY_NAME)
+    DIRECTORY_NAME = os.path.basename(config.get('source')) + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
+    DIRECTORY_BASE = os.path.join(os.path.dirname(config.get('source')), DIRECTORY_NAME)
     os.makedirs(DIRECTORY_BASE, exist_ok=True)
 
     # Files
@@ -56,23 +55,22 @@ def main(config_file):
 
     # Backup files
     shutil.copy(config_file, DIRECTORY_BASE)
-    shutil.copy(config.source, DIRECTORY_BASE)    
+    shutil.copy(config.get('source'), DIRECTORY_BASE)    
 
     # Tracking options
-    detection_rate: int = 2
-    video_downscale: float = 1.
-    show_detections: bool = True
-    show_trackers: bool = True
-    use_roi: bool = False
+    detection_rate: int = config.get('detection_rate', int)
+    video_downscale: float = config.get('video_downscale', float)
+    show_detections: bool = config.get('show_detections', bool)
+    show_trackers: bool = config.get('show_trackers', bool)
+    use_roi: bool = config.get('use_roi', bool)
 
     # Load video
-    video = Video(config.source)
+    video = Video(config.get('source'))
     video.open()
     frame = video.read(downscale=video_downscale)
 
     # Divide frame
-    cell_size = int(config.cell_size)
-    grid = Grid(cell_size)
+    grid = Grid(config.get('cell_size', int))
     grid.divide(frame)
     #frame = grid.plot(frame)
 
@@ -84,7 +82,7 @@ def main(config_file):
 
     # Start tracking
     detector = YOLODetector()
-    tracker = MultiObjectTracker.make('particle', video.fps)
+    tracker = MultiObjectTracker.make(config.get('tracker'), video.fps)
 
     def on_track_event(event):
         db = DB(FILE_DATABASE)
@@ -212,20 +210,18 @@ def main(config_file):
     video.rewind()
     frame = video.read(downscale=video_downscale)
 
-    # Save cell stats
+    # Save metrics image
     cv2.imwrite(DIRECTORY_BASE + '/cell_scores.jpg', frame_cell_scores(FILE_DATABASE, frame, grid, (50,0,0)))
     cv2.imwrite(DIRECTORY_BASE + '/cell_qty.jpg', frame_cell_traffic(FILE_DATABASE, frame, grid, (0,50,0)))
-
-    # Close video
-    video.release()
-
-    # Save metrics image
+    cv2.imwrite(DIRECTORY_BASE + '/trackers_duration.jpg', stats_tracking_duration(FILE_DATABASE))
     cv2.imwrite(DIRECTORY_BASE + '/FPS.jpg', METRIC_FPS.plot())
     cv2.imwrite(DIRECTORY_BASE + '/detections.jpg', METRIC_DETECTIONS.plot())
     cv2.imwrite(DIRECTORY_BASE + '/trackers_errors.jpg', METRIC_ERRORS.plot())
     cv2.imwrite(DIRECTORY_BASE + '/trackers_active.jpg', METRIC_TRACKERS.plot())
     cv2.imwrite(DIRECTORY_BASE + '/trackers_delta.jpg', METRIC_TRACKERSDELTA.plot())
-    cv2.imwrite(DIRECTORY_BASE + '/trackers_duration.jpg', stats_tracking_duration(FILE_DATABASE))
+
+    # Close video
+    video.release()
     
     # Show metrics
     SCREEN_STATS_1.show(METRIC_FPS.plot(), wait=False)

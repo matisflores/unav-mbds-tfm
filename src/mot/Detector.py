@@ -10,8 +10,8 @@ class YOLODetector:
 
     def __init__(self):
         config = Config()
-        self._detector = YOLO(config.data_dir + '/yolov8n.pt')
-        self._confidence_threshold = float(config.yolo_confidence_threshold)
+        self._detector = YOLO(config.get('data_dir') + '/yolov8n.pt')
+        self._confidence_threshold = config.get('confidence_threshold', float, section='yolo')
 
     def detect(self, frame) -> list[Detection]:
         results = self._detector(frame, verbose=False)

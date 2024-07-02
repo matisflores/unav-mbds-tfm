@@ -80,8 +80,8 @@ class MultiObjectTracker():
                 tracker_clss=KalmanTracker,
                 tracker_kwargs={'max_staleness': 5},
                 model_spec={'order_pos': 1, 'dim_pos': 2, 'order_size': 0, 'dim_size': 2, 'q_var_pos': 5000., 'r_var_pos': 0.1},
-                matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
-                active_tracks_kwargs={'min_steps_alive': int(config.kalman_min_steps_alive)}
+                matching_fn_kwargs={'min_iou': config.get('min_iou', float), 'multi_match_min_iou': 0.93},
+                active_tracks_kwargs={'min_steps_alive': config.get('detection_rate', int) + 1}
             ))
         elif type == 'GH':
             return MultiObjectTracker(_MultiObjectTracker(
@@ -89,8 +89,8 @@ class MultiObjectTracker():
                 tracker_clss=GHTracker,
                 tracker_kwargs={'max_staleness': 5},
                 model_spec={},
-                matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
-                active_tracks_kwargs={'min_steps_alive': int(config.kalman_min_steps_alive)}
+                matching_fn_kwargs={'min_iou': config.get('min_iou', float), 'multi_match_min_iou': 0.93},
+                active_tracks_kwargs={'min_steps_alive': config.get('detection_rate', int) + 1}
             ))
         elif type == 'PARTICLE':
             return MultiObjectTracker(_MultiObjectTracker(
@@ -98,6 +98,6 @@ class MultiObjectTracker():
                 tracker_clss=ParticleTracker,
                 tracker_kwargs={'max_staleness': 5},
                 model_spec={},
-                matching_fn_kwargs={'min_iou': float(config.kalman_min_iou), 'multi_match_min_iou': 0.93},
-                active_tracks_kwargs={'min_steps_alive': int(config.kalman_min_steps_alive)}
+                matching_fn_kwargs={'min_iou': config.get('min_iou', float), 'multi_match_min_iou': 0.93},
+                active_tracks_kwargs={'min_steps_alive': config.get('detection_rate', int) + 1}
             ))            

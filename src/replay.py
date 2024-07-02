@@ -124,13 +124,12 @@ def main(config_file, db_file):
     config.load(config_file)
 
     # Load video
-    video = Video(config.source)
+    video = Video(config.get('source'))
     video.open()
     frame = video.read(skip=0)
 
     # Divide frame
-    cell_size = int(config.cell_size)
-    grid = Grid(cell_size)
+    grid = Grid(config.get('cell_size', int))
     grid.divide(frame)
 
     #frame = grid.plot(frame)
@@ -163,7 +162,7 @@ if __name__ == "__main__":
     if args.database == '':
         config = Config()
         config.load(args.config)
-        list_of_files = glob.glob(config.data_dir + '/' + os.path.basename(config.source) + '*.db') # * means all if need specific format then *.csv
+        list_of_files = glob.glob(config.get('data_dir') + '/' + os.path.basename(config.get('source')) + '*.db') # * means all if need specific format then *.csv
         args.database = max(list_of_files, key=os.path.getctime)
 
     # Call main function with command-line arguments
