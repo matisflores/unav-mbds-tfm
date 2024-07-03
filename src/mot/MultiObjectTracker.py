@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict
 
 from mot.Track import Track
-from mot.Trackers import GHTracker, KalmanTracker, ParticleTracker
+from mot.Trackers import GHTracker, KalmanTracker, ParticleTracker, UnscentedKalmanTracker
 from utils.Config import Config
 
 def track_from_motpy(track: motpy.core.Track):
@@ -78,6 +78,15 @@ class MultiObjectTracker():
             return MultiObjectTracker(_MultiObjectTracker(
                 dt=1 / fps,
                 tracker_clss=KalmanTracker,
+                tracker_kwargs={'max_staleness': 5},
+                model_spec={'order_pos': 1, 'dim_pos': 2, 'order_size': 0, 'dim_size': 2, 'q_var_pos': 5000., 'r_var_pos': 0.1},
+                matching_fn_kwargs={'min_iou': config.get('min_iou', float), 'multi_match_min_iou': 0.93},
+                active_tracks_kwargs={'min_steps_alive': config.get('detection_rate', int) + 1}
+            ))
+        elif type == 'UNSCENTED':
+            return MultiObjectTracker(_MultiObjectTracker(
+                dt=1 / fps,
+                tracker_clss=UnscentedKalmanTracker,
                 tracker_kwargs={'max_staleness': 5},
                 model_spec={'order_pos': 1, 'dim_pos': 2, 'order_size': 0, 'dim_size': 2, 'q_var_pos': 5000., 'r_var_pos': 0.1},
                 matching_fn_kwargs={'min_iou': config.get('min_iou', float), 'multi_match_min_iou': 0.93},

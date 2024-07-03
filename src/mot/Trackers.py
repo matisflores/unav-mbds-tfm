@@ -1,7 +1,7 @@
 import numpy as np
 
 from filterpy.gh import GHFilter
-from filterpy.kalman import KalmanFilter
+from filterpy.kalman import KalmanFilter, UnscentedKalmanFilter, MerweScaledSigmaPoints
 from filterpy.monte_carlo import systematic_resample
 from motpy.core import Box, Detection, Vector, setup_logger
 from motpy.model import Model
@@ -58,7 +58,7 @@ class Tracker(SingleObjectTracker):
             return True
 
 class GHTracker(Tracker):
-    """ A single object tracker using GH filter with specified motion model specification """
+    """ A single object tracker using GH filter """
 
     def __init__(self,
                  model_kwargs: dict = { 'dt': 1 },
@@ -120,7 +120,7 @@ class KalmanTracker(Tracker):
         self._center = self._box_to_point(detection.box)
 
 class ParticleTracker(Tracker):
-    """ A single object tracker using Particle filter with specified motion model specification """
+    """ A single object tracker using Particle filter """
 
     _particles_qty = None
     _particles = None
@@ -189,3 +189,53 @@ class ParticleTracker(Tracker):
         particles[:, 2] = mean[2] + (randn(N) * std[2])
         particles[:, 2] %= 2 * np.pi
         return particles
+
+class UnscentedKalmanTracker(Tracker):
+    """ A single object tracker using Unscented Kalman filter """
+
+    def __init__(self,
+                 model_kwargs: dict = { 'dt': 1 },
+                 x0: Optional[Vector] = None,
+                 box0: Optional[Box] = None,
+                 **kwargs) -> None:
+        
+        super(UnscentedKalmanTracker, self).__init__(box0, **kwargs)
+
+        self.model_kwargs: dict = model_kwargs
+        self.model = Model(**self.model_kwargs)
+
+        # Generate 2n+1 points
+        x = self.model.box_to_x(box0)
+        sigmas = MerweScaledSigmaPoints(n=len(x), alpha=.1, beta=2., kappa=3-model_kwargs['dim_pos'])
+
+        def fx(x, dt):
+            # state transition function - predict next state based on constant velocity model x = vt + x_0
+            F = self.model.build_F()
+            return np.dot(F, x)
+        
+        def hx(x):
+            # takes a state variable and returns the measurement that would correspond to that state
+            H = self.model.build_H()
+            return np.dot(H, x)
+
+        tracker = UnscentedKalmanFilter(dim_x=self.model.state_length, dim_z=self.model.measurement_length, dt=model_kwargs['dt'], hx=hx, fx=fx, points=sigmas)
+
+        tracker.Q = self.model.build_Q()
+        tracker.R = self.model.build_R()
+        #tracker.R = None
+        tracker.P = self.model.build_P()
+        tracker.x = x
+
+        self._tracker: UnscentedKalmanFilter = tracker
+
+    def _predict(self) -> None:
+        self._tracker.predict()
+        self._center = self._box_to_point(self.model.x_to_box(self._tracker.x))
+
+    def _update_box(self, detection: Detection) -> None:
+        error = self._tracker.x - self.model.box_to_x(detection.box)
+        self._calc_error_distribution(error)
+
+        z = self.model.box_to_z(detection.box)
+        self._tracker.update(z)
+        self._center = self._box_to_point(detection.box)
