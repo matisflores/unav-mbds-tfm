@@ -12,21 +12,21 @@ class DB:
         self._db = sqlite3.connect(path)
         
         c = self._db.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS tracks (tracker TEXT, position TEXT, direction TEXT, cell INTEGER, step INTEGER, roi TEXT, score REAL, 'timestamp' INTEGER)")
-        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, step INTEGER, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS tracks (tracker TEXT, position TEXT, direction TEXT, cell INTEGER, frame INTEGER, roi TEXT, score REAL, 'timestamp' INTEGER)")
+        c.execute("CREATE TABLE IF NOT EXISTS metrics (metric TEXT, value TEXT, frame INTEGER, 'timestamp' DATETIME DEFAULT CURRENT_TIMESTAMP)")
         self._db.commit()
     
     def __del__(self):
         self._db.close()
     
-    def save_track(self, tracker, position, direction, cell, step, roi, score, timestamp):
+    def save_track(self, tracker, position, direction, cell, frame, roi, score, timestamp):
         c = self._db.cursor()
-        c.execute("INSERT INTO tracks (tracker, position, direction, cell, step, roi, score, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (tracker, str(position), str(direction), cell, step, roi, score, timestamp))
+        c.execute("INSERT INTO tracks (tracker, position, direction, cell, frame, roi, score, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (tracker, str(position), str(direction), cell, frame, roi, score, timestamp))
         self._db.commit()
 
-    def save_metrics(self, metric, step, value):
+    def save_metrics(self, metric, frame, value):
         c = self._db.cursor()
-        c.execute("INSERT INTO metrics (metric, step, value) VALUES (?, ?, ?)", (metric, step, value))
+        c.execute("INSERT INTO metrics (metric, frame, value) VALUES (?, ?, ?)", (metric, frame, value))
         self._db.commit()
 
     def load_cell_scores(self):

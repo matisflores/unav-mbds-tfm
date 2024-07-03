@@ -117,7 +117,7 @@ class Metric():
             moving_avg_steps = steps_list[window_size - 1:] 
             plt.plot(moving_avg_steps, moving_avg, label = 'Moving Average')
 
-        plt.xlabel('Step')
+        plt.xlabel('Frame')
         plt.ylabel(self._name)
         plt.savefig(buffer, format='png')
         plt.clf()
