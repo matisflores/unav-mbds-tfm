@@ -1,6 +1,8 @@
 # Trabajo Final de Master
 El presente programa fue generado como soporte a la investigación titulada **TRACKING DE OBJETOS Y CARACTERIZACIÓN DE ACTIVIDAD MEDIANTE COMPUTER VISION** correspondiente al Master en Big Data Science de la Universidad de Navarra.
 
+![App Platorm](/assets/frame.jpg)
+
 ## Dependencias
 ```
 pip install -r requirements.txt
@@ -51,3 +53,6 @@ python src/main.py
 mprof run src/main.py
 mprof plot
 ````
+
+## Procesamiento de resultados
+notebook disponible en [Google Colab](https://colab.research.google.com/drive/18QWi1jdQVh6h8hyZfJHFj0moUrUrtbqy)
