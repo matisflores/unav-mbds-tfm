@@ -2,8 +2,9 @@
 El presente programa fue generado como soporte a la investigación titulada **TRACKING DE OBJETOS Y CARACTERIZACIÓN DE ACTIVIDAD MEDIANTE COMPUTER VISION** correspondiente al Master en Big Data Science de la Universidad de Navarra.
 
 ## Dependencias
-
+```
 pip install -r requirements.txt
+```
 
 ## Configuración
 ```
