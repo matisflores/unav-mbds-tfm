@@ -34,7 +34,7 @@ show_detections = True
 show_trackers = True
 
 # tracker to use
-tracker = unscented
+tracker = gh | kalman | unscented | particle
 
 # iou threshold
 min_iou = 0.5
