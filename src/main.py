@@ -172,7 +172,7 @@ def main(config_file):
         # On End
         METRIC_FPS.stop(step)
 
-        screen_events.put(frame)
+        screen_events.put({'frame':frame,'step':step})
 
     def read_frame():
         return video.read(downscale=video_downscale, soft=True)
@@ -181,9 +181,14 @@ def main(config_file):
     video_processor.start()
 
     # Process screen events on main thread
-    step = 0
     while True:
-        frame = screen_events.get()
+        tmp = screen_events.get()
+
+        if tmp is None:
+            break
+
+        frame = tmp['frame']
+        step = tmp['step']
 
         if frame is None:
             break
@@ -191,8 +196,6 @@ def main(config_file):
         key = SCREEN_PRIMARY.show(frame, filename=FILE_FRAMES + f'/{step}.jpg')
         if key == ord('q'):
             break
-
-        step += 1
 
     video_processor.stop()
     tracker_events_processor.stop()

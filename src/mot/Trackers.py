@@ -32,8 +32,8 @@ class Tracker(SingleObjectTracker):
 
     def _calc_error_distribution(self, error):
         self._error_min = np.min(error)
-        self._error_max = np.mean(error)
-        self._error_mean = np.max(error)
+        self._error_max = np.max(error)
+        self._error_mean = np.mean(error)
         self._error_var = np.mean(error**2)
 
     def error(self):
@@ -77,8 +77,7 @@ class GHTracker(Tracker):
     def _update_box(self, detection: Detection) -> None:
         x = self._box_to_point(detection.box)
 
-        error = self._tracker.x - x
-        self._calc_error_distribution(error)
+        self._calc_error_distribution(x - self._tracker.x)
 
         self._tracker.update(x)
         self._center = x
@@ -112,8 +111,7 @@ class KalmanTracker(Tracker):
         self._center = self._box_to_point(self.model.x_to_box(self._tracker.x))
 
     def _update_box(self, detection: Detection) -> None:
-        error = self._tracker.x - self.model.box_to_x(detection.box)
-        self._calc_error_distribution(error)
+        self._calc_error_distribution(self.model.box_to_x(detection.box) - self._tracker.x)
 
         z = self.model.box_to_z(detection.box)
         self._tracker.update(z)
@@ -126,9 +124,10 @@ class ParticleTracker(Tracker):
     _particles = None
     _weights = None
     _dt = 1.
+    _noise = .001
 
     def __init__(self,
-                 model_kwargs: dict = { 'dt': 1 },
+                 model_kwargs: dict = {'dt': 1},
                  x0: Optional[Vector] = None,
                  box0: Optional[Box] = None,
                  **kwargs) -> None:
@@ -137,59 +136,61 @@ class ParticleTracker(Tracker):
 
         self._particles_qty = 500
         self._dt = model_kwargs['dt']
-        std = (5, 5, np.pi/4)
 
-        self._particles = self._create_gaussian_particles(mean=(self._center[0], self._center[1], np.pi/4), std=std, N=self._particles_qty)
+        mean = (self._center[0], self._center[1], 0, 0)
+        std = (1, 1, 1, 1)
+
+        self._particles = self._create_gaussian_particles(mean=mean, std=std, N=self._particles_qty)
         self._weights = np.ones(self._particles_qty) / self._particles_qty
 
     def _predict(self) -> None:
-        u = (0., 1.)
-        std = (.2, .05)
+        # Predict new position based on velocity and course
+        self._particles[:, 0] += self._particles[:, 2] * self._dt
+        self._particles[:, 1] += self._particles[:, 3] * self._dt
 
-        # update heading (curso, direccion)
-        self._particles[:, 2] += u[0] + (randn(self._particles_qty) * std[0]) #direction change
-        self._particles[:, 2] %= 2 * np.pi
-
-        # move in the (noisy) commanded direction
-        dist = (u[1] * self._dt) + (randn(self._particles_qty) * std[1]) #velocity*tiempo + noise
-        self._particles[:, 0] += np.cos(self._particles[:, 2]) * dist
-        self._particles[:, 1] += np.sin(self._particles[:, 2]) * dist
-
-        pos = self._particles[:, 0:2]
-        self._center = np.average(pos, weights=self._weights, axis=0)
+        self._center = np.average(self._particles[:, 0:2], weights=self._weights, axis=0)
 
     def _update_box(self, detection: Detection) -> None:
         x = self._box_to_point(detection.box)
-        noise = .1
 
-        error = self._center - x
+        error = x - self._center
         self._calc_error_distribution(error)
 
-        zs = np.linalg.norm(error, axis=0) + (randn(1) * noise)
-        distance = np.linalg.norm(self._particles[:, 0:2] - zs, axis=1)
-        self._weights *= scipy.stats.norm(distance, noise).pdf(zs)
-        self._weights += 1.e-300 # avoid round-off to zero
-        self._weights /= sum(self._weights) # normalize
+        self._particles[:, 0] = x[0] + (randn(1) * self._noise)
+        self._particles[:, 1] = x[1] + (randn(1) * self._noise)
 
-        # resample if too few effective particles
-        if (1. / np.sum(np.square(self._weights))) < self._particles_qty/2:
+        zs = (np.linalg.norm( - x, axis=0) + (randn(1) * self._noise))
+        distance = np.linalg.norm(self._particles[:, 0:2], axis=1)
+        self._weights *= scipy.stats.norm(distance, self._noise).pdf(zs)
+        self._weights += 1.e-300  # avoid round-off to zero
+        self._weights /= sum(self._weights)  # normalize
+
+        # Resample if too few effective particles
+        if (1. / np.sum(np.square(self._weights))) < self._particles_qty / 2:
             indexes = systematic_resample(self._weights)
             self._particles[:] = self._particles[indexes]
             self._particles_qty = len(self._particles)
             self._weights.resize(self._particles_qty)
-            self._weights.fill (1.0 / len(self._weights))
-            assert np.allclose(self._weights, 1/self._particles_qty)
+            self._weights.fill(1.0 / len(self._weights))
+            assert np.allclose(self._weights, 1 / self._particles_qty)
 
-        self._center = x
+        # Update velocities based on the error
+        velocity_error = error / self._dt
+        self._particles[:, 2] += velocity_error[0] + (randn(self._particles_qty) * self._noise)
+        self._particles[:, 3] += velocity_error[1] + (randn(self._particles_qty) * self._noise)
+
+        # Update the center
+        self._center = np.average(self._particles[:, 0:2], weights=self._weights, axis=0)
 
     def _create_gaussian_particles(self, mean, std, N):
-        particles = np.empty((N, 3))
+        particles = np.empty((N, 4))
         particles[:, 0] = mean[0] + (randn(N) * std[0])
         particles[:, 1] = mean[1] + (randn(N) * std[1])
         particles[:, 2] = mean[2] + (randn(N) * std[2])
-        particles[:, 2] %= 2 * np.pi
-        return particles
+        particles[:, 3] = mean[3] + (randn(N) * std[3])
 
+        return particles
+    
 class UnscentedKalmanTracker(Tracker):
     """ A single object tracker using Unscented Kalman filter """
 
@@ -233,8 +234,7 @@ class UnscentedKalmanTracker(Tracker):
         self._center = self._box_to_point(self.model.x_to_box(self._tracker.x))
 
     def _update_box(self, detection: Detection) -> None:
-        error = self._tracker.x - self.model.box_to_x(detection.box)
-        self._calc_error_distribution(error)
+        self._calc_error_distribution(self.model.box_to_x(detection.box) - self._tracker.x)
 
         z = self.model.box_to_z(detection.box)
         self._tracker.update(z)
