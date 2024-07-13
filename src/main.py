@@ -153,7 +153,7 @@ def main(config_file):
 
         error = tracker.error()
         if error is not None:
-            METRIC_ERRORS.store(error[1], step)
+            METRIC_ERRORS.store(error[3], step)
 
         # Show roi
         if use_roi:
